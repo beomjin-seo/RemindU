@@ -100,6 +100,69 @@ def test_shopping_pipeline_fallback_when_fetch_fails(make_client, png_upload):
     assert link["domain"] == "search.naver.com"
 
 
+def test_shopping_retailer_candidate_verified_first(make_client, png_upload):
+    # Screenshot shows Coupang -> the coupang.com candidate is verified before
+    # an earlier-listed candidate from another mall, so the card links to the
+    # store the user was actually shopping at.
+    extraction = SHOPPING_EXTRACTION.model_copy(update={"visible_domain": "m.coupang.com"})
+    other_url = "https://other-mall.example.com/p/1"
+    coupang_url = "https://www.coupang.com/vp/products/123"
+    client = make_client(
+        extraction,
+        search_results=[
+            SearchResult(url=other_url, title="Nike Air Max 97"),
+            SearchResult(url=coupang_url, title="Nike Air Max 97"),
+        ],
+        pages={
+            other_url: "<html>Buy Nike Air Max 97 for 129,000 won</html>",
+            coupang_url: "<html>Nike Air Max 97 129,000 free shipping</html>",
+        },
+    )
+    card = upload_and_resolve(client, png_upload)
+
+    link = card["shopping"]["link"]
+    assert link["verified"] is True
+    assert link["kind"] == "product"
+    assert link["url"] == coupang_url
+
+
+def test_shopping_retailer_fallback_targets_retailer_search(make_client, png_upload):
+    # Screenshot shows Musinsa but nothing verifies -> fallback is Musinsa's
+    # own search page, not generic Naver search.
+    extraction = SHOPPING_EXTRACTION.model_copy(update={"visible_domain": "www.musinsa.com"})
+    client = make_client(extraction, search_results=[], pages={})
+    card = upload_and_resolve(client, png_upload)
+
+    link = card["shopping"]["link"]
+    assert link["verified"] is False
+    assert link["kind"] == "search_results"
+    expected = "https://www.musinsa.com/search/goods?" + urlencode({"keyword": "Nike Air Max 97"})
+    assert link["url"] == expected
+    assert link["domain"] == "www.musinsa.com"
+
+
+def test_shopping_store_name_ranks_matching_mall_first(make_client, png_upload):
+    # No known retailer domain, but the screenshot showed the seller name ->
+    # the candidate whose mall name (snippet) matches is verified first.
+    extraction = SHOPPING_EXTRACTION.model_copy(update={"store_name": "나이키공식스토어"})
+    generic_url = "https://random-mall.example.com/p/9"
+    official_url = "https://official.example.com/airmax97"
+    client = make_client(
+        extraction,
+        search_results=[
+            SearchResult(url=generic_url, title="Nike Air Max 97", snippet="어떤몰"),
+            SearchResult(url=official_url, title="Nike Air Max 97", snippet="나이키공식스토어"),
+        ],
+        pages={
+            generic_url: "<html>Nike Air Max 97 129,000</html>",
+            official_url: "<html>Nike Air Max 97 129,000</html>",
+        },
+    )
+    card = upload_and_resolve(client, png_upload)
+
+    assert card["shopping"]["link"]["url"] == official_url
+
+
 def test_capture_upload_rejects_unsupported_content_type(make_client):
     client = make_client(GENERIC_EXTRACTION)
     response = client.post(

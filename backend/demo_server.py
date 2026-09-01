@@ -24,7 +24,9 @@ _BACKEND_DIR = Path(__file__).resolve().parent
 
 _SHOPPING = CaptureExtraction(
     kind="shopping",
-    visible_domain="demo.example",
+    # A recognized retailer domain -> the fallback link targets Musinsa's own
+    # search page instead of generic Naver search.
+    visible_domain="www.musinsa.com",
     product_name="뉴에라 볼캡 (DEMO)",
     brand="New Era",
     price=39000,

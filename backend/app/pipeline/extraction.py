@@ -16,6 +16,7 @@ class CaptureExtraction(BaseModel):
     visible_domain: str | None = None
     product_name: str | None = None
     brand: str | None = None
+    store_name: str | None = None
     price: int | None = None
     currency: str | None = None
     deadline_text: str | None = None
@@ -37,7 +38,9 @@ _INSTRUCTION = (
     "Classify it as shopping (a product, price, or sale), place (a restaurant, "
     "cafe, or location), or generic (anything else). Fill only fields you can "
     "read from the image. visible_domain is the domain text visible in the "
-    "screenshot, if any. Never guess values that are not visible."
+    "screenshot, if any. store_name is the seller/mall/store name shown in the "
+    "screenshot (e.g. a Coupang seller or SmartStore shop name), if any. "
+    "Never guess values that are not visible."
 )
 
 
