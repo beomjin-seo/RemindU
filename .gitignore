@@ -1,0 +1,6 @@
+.DS_Store
+.env
+
+# Xcode project is generated from ios/project.yml — run `xcodegen generate` in ios/
+ios/CaptureInbox.xcodeproj/
+ios/DerivedData/
