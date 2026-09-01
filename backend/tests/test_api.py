@@ -72,11 +72,11 @@ def test_shopping_pipeline_fallback_when_page_does_not_match(make_client, png_up
     link = card["shopping"]["link"]
     assert link["verified"] is False
     assert link["kind"] == "search_results"
-    expected = "https://search.shopping.naver.com/search/all?" + urlencode(
+    expected = "https://search.naver.com/search.naver?" + urlencode(
         {"query": "Nike Air Max 97"}
     )
     assert link["url"] == expected
-    assert link["domain"] == "search.shopping.naver.com"
+    assert link["domain"] == "search.naver.com"
 
 
 def test_shopping_pipeline_fallback_when_fetch_fails(make_client, png_upload):
@@ -93,11 +93,11 @@ def test_shopping_pipeline_fallback_when_fetch_fails(make_client, png_upload):
     link = card["shopping"]["link"]
     assert link["verified"] is False
     assert link["kind"] == "search_results"
-    expected = "https://search.shopping.naver.com/search/all?" + urlencode(
+    expected = "https://search.naver.com/search.naver?" + urlencode(
         {"query": "Nike Air Max 97"}
     )
     assert link["url"] == expected
-    assert link["domain"] == "search.shopping.naver.com"
+    assert link["domain"] == "search.naver.com"
 
 
 def test_capture_upload_rejects_unsupported_content_type(make_client):

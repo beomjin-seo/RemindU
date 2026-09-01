@@ -76,4 +76,7 @@ def verify_candidate(fetch_fn: FetchFn, url: str, extraction: CaptureExtraction)
 
 def build_search_fallback_url(query: str) -> str:
     # Deterministically constructed search-results URL — never LLM output.
-    return "https://search.shopping.naver.com/search/all?" + urlencode({"query": query})
+    # Naver integrated search, NOT search.shopping.naver.com: the shopping
+    # vertical bot-blocks cold external entries (no cookies/JS history), which
+    # breaks the fallback link for real users in an in-app browser.
+    return "https://search.naver.com/search.naver?" + urlencode({"query": query})
