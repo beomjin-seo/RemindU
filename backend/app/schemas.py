@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class Link(BaseModel):
@@ -46,6 +46,14 @@ class CardOut(BaseModel):
     shopping: ShoppingPayload | None = None
     place: PlacePayload | None = None
     generic: GenericPayload | None = None
+
+    # DB datetimes come back naive (SQLite drops the timezone); the contract
+    # promises ISO 8601 with timezone, and the iOS date decoder requires it.
+    @field_serializer("created_at")
+    def _created_at_utc(self, value: datetime) -> str:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat().replace("+00:00", "Z")
 
 
 class CardListOut(BaseModel):
