@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#111113">
+  <title>스크린샷 · Dark concept</title>
+  <link rel="stylesheet" href="dark.css">
+  <script src="dark.js" defer></script>
+</head>
+<body>
+  <header class="preview-toolbar">
+    <a class="concept-label" href="dark.html"><span class="concept-dot"></span> DARK CONCEPT <span class="concept-number">02</span></a>
+    <div class="preview-actions"><button id="replay" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M19.4 12a7.5 7.5 0 1 0-1.7 4.8"/></svg>모션 다시 보기</button></div>
+  </header>
+  <main class="presentation">
+    <div class="device" id="device">
+      <div class="statusbar" aria-hidden="true"><span>9:41</span><div class="island"></div><div class="status-signals"><svg viewBox="0 0 20 14"><path d="M2 11v1M6 8v4M10 5v7M14 2v10"/></svg><svg viewBox="0 0 20 14"><path d="M2 4a12 12 0 0 1 16 0M5 7a8 8 0 0 1 10 0M8 10a3 3 0 0 1 4 0"/></svg><span class="battery"></span></div></div>
+      <section class="library" id="library" aria-label="스크린샷 라이브러리">
+        <div class="library-scroll" id="library-scroll">
+          <header class="library-heading">
+            <div class="section-label"><span class="stack-icon" aria-hidden="true"><i></i><i></i></span>스크린샷</div>
+            <div class="heading-stack">
+              <div class="intro-heading" id="intro-heading"><h1>흩어진 순간을,<br>한곳에.</h1></div>
+              <div class="ready-heading" id="ready-heading"><h1>모아보기</h1><p>저장한 순간에서, 원래 페이지로.</p></div>
+            </div>
+          </header>
+          <div class="collection-heading"><h2>최근 스크린샷</h2><span>9개</span></div>
+          <div class="shot-grid" id="shot-grid"></div>
+          <p class="library-footnote"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 15 6-6M8 10l-2 2a4 4 0 0 0 6 6l2-2M10 8l2-2a4 4 0 0 1 6 6l-2 2"/></svg>장면을 누르면, 다시 이어져요</p>
+        </div>
+        <div class="gather-status" id="gather-status" role="status"><span class="gather-symbol" aria-hidden="true">✦</span><span id="gather-copy">흩어진 순간을 모으고 있어요</span></div>
+      </section>
+      <section class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="detail-title" hidden>
+        <header class="detail-nav"><button class="round-button" id="close-detail" aria-label="모아보기로 돌아가기"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button><span>스크린샷</span><span class="nav-spacer"></span></header>
+        <div class="detail-scroll" id="detail-scroll">
+          <div class="detail-preview" id="detail-preview"><div class="detail-art" id="detail-art"></div></div>
+          <div class="detail-info">
+            <div class="inference-meta"><div class="match-status" id="match-status" title="AI가 추정한 링크 정확도"><span class="confidence-dot" aria-hidden="true"></span><span>링크 정확도</span><strong id="link-confidence"></strong></div><time class="capture-time" id="capture-time" title="사진첩에 기록된 날짜와 시간"></time></div>
+            <h2 id="detail-title"></h2><p class="detail-description" id="detail-description"></p>
+            <div class="source-row"><div class="source-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c5 4 5 12 0 16-5-4-5-12 0-16Z"/></svg></div><div><strong id="detail-source"></strong><span id="detail-type"></span></div><svg class="source-check" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 12 3 3 7-7"/></svg></div>
+            <section class="candidate-section" id="candidate-section" aria-labelledby="candidate-heading" hidden><div class="candidate-heading"><h3 id="candidate-heading">후보 링크</h3><span id="candidate-count"></span></div><p class="candidate-description">같은 내용인지 비교해 보세요.</p><ol class="candidate-list" id="candidate-list"></ol></section>
+          </div>
+        </div>
+        <footer class="detail-footer"><a id="open-source" class="primary-button" target="_blank" rel="noopener noreferrer">원본 페이지 열기<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"/></svg></a></footer>
+      </section>
+      <div class="home-indicator" aria-hidden="true"></div>
+    </div>
+  </main>
+  <footer class="preview-caption"><span>이미지를 눌러 상세 화면을 확인하세요</span><span>AI 추론·정확도·날짜는 예시 데이터이며, 링크는 사진 출처로 연결됩니다</span></footer>
+</body>
+</html>
