@@ -1,0 +1,53 @@
+name: Deploy dark UI prototype
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ui-prototype/**'
+      - '!ui-prototype/**/*.md'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ui-prototype-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out only the UI prototype
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: /ui-prototype/
+          sparse-checkout-cone-mode: false
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Verify the static entry points
+        run: |
+          test -f ui-prototype/index.html
+          test -f ui-prototype/dark.html
+          test -f ui-prototype/dark.js
+          test -f ui-prototype/dark.css
+          test -d ui-prototype/dark-assets
+
+      - name: Upload only the UI prototype
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ui-prototype
+
+      - name: Deploy the UI prototype
+        id: deployment
+        uses: actions/deploy-pages@v5
