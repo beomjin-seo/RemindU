@@ -59,6 +59,7 @@ def test_shopping_pipeline_verified_link(make_client, png_upload):
     assert link["kind"] == "product"
     assert link["url"] == CANDIDATE_URL
     assert link["domain"] == "store.example.com"
+    assert link["trusted"] is False  # unknown mall: no safety badge
 
 
 def test_shopping_pipeline_fallback_when_page_does_not_match(make_client, png_upload):
@@ -124,6 +125,7 @@ def test_shopping_retailer_candidate_verified_first(make_client, png_upload):
     assert link["verified"] is True
     assert link["kind"] == "product"
     assert link["url"] == coupang_url
+    assert link["trusted"] is True
 
 
 def test_shopping_retailer_fallback_targets_retailer_search(make_client, png_upload):
@@ -139,6 +141,7 @@ def test_shopping_retailer_fallback_targets_retailer_search(make_client, png_upl
     expected = "https://www.musinsa.com/search/goods?" + urlencode({"keyword": "Nike Air Max 97"})
     assert link["url"] == expected
     assert link["domain"] == "www.musinsa.com"
+    assert link["trusted"] is True
 
 
 def test_shopping_store_name_ranks_matching_mall_first(make_client, png_upload):

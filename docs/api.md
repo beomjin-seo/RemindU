@@ -111,7 +111,8 @@ Exactly one of `shopping` / `place` / `generic` is non-null, matching `type`.
     "url": "…",
     "domain": "…",
     "verified": true | false,
-    "kind": "product" | "search_results"
+    "kind": "product" | "search_results",
+    "trusted": true | false
   }
 }
 ```
@@ -127,6 +128,9 @@ Link rules (product invariants):
 - No match or fetch failure falls back to a search-results link with
   `verified: false, kind: "search_results"`. An unverified link is never
   shipped as `kind: "product"`.
+- `trusted: true` means the link's domain is on the server-side allowlist of
+  well-known retailers/portals (Naver, Kakao, Coupang, Musinsa, …). Clients
+  render it as a safety badge; it is independent of `verified`.
 
 Confidence tiers:
 

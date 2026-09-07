@@ -4,6 +4,7 @@ from app.pipeline.classifier import derive_confidence
 from app.pipeline.extraction import CaptureExtraction
 from app.pipeline.retailers import Retailer, is_retailer_url, match_retailer
 from app.pipeline.search.base import SearchClient, SearchResult
+from app.pipeline.trust import is_trusted_domain
 from app.pipeline.verification import FetchFn, build_search_fallback_url, verify_candidate
 from app.schemas import Link, ShoppingPayload
 
@@ -54,11 +55,13 @@ def resolve_shopping(
     ranked = rank_candidates(candidates, retailer, extraction.store_name)
     for candidate in ranked[:_MAX_CANDIDATES]:
         if verify_candidate(fetch_fn, candidate.url, extraction):
+            domain = urlparse(candidate.url).netloc
             link = Link(
                 url=candidate.url,
-                domain=urlparse(candidate.url).netloc,
+                domain=domain,
                 verified=True,
                 kind="product",
+                trusted=is_trusted_domain(domain),
             )
             break
 
@@ -69,11 +72,13 @@ def resolve_shopping(
         fallback_url = (
             retailer.search_url(query) if retailer else build_search_fallback_url(query)
         )
+        fallback_domain = urlparse(fallback_url).netloc
         link = Link(
             url=fallback_url,
-            domain=urlparse(fallback_url).netloc,
+            domain=fallback_domain,
             verified=False,
             kind="search_results",
+            trusted=is_trusted_domain(fallback_domain),
         )
 
     return ShoppingPayload(

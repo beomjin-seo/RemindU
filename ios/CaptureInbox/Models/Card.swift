@@ -50,6 +50,7 @@ struct ShoppingLink: Codable {
     let domain: String
     let verified: Bool
     let kind: Kind
+    let trusted: Bool
 }
 
 struct PlacePayload: Codable {

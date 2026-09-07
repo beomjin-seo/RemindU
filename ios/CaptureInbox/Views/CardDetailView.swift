@@ -8,10 +8,20 @@ struct CardDetailView: View {
     var onNotThis: () -> Void
 
     @State private var safariItem: SafariItem?
+    @State private var pendingLink: PendingLink?
 
     private struct SafariItem: Identifiable {
         let id = UUID()
         let url: URL
+    }
+
+    // Link preview shown before anything opens (CLAUDE.md link-safety rule):
+    // the user always sees where a tap will take them, Instagram-style.
+    private struct PendingLink {
+        let url: URL
+        let domain: String
+        let trusted: Bool
+        let kindLabel: String
     }
 
     var body: some View {
@@ -31,6 +41,10 @@ struct CardDetailView: View {
 
             navBar
             footer
+
+            if let pending = pendingLink {
+                linkConfirmOverlay(pending)
+            }
         }
         .sheet(item: $safariItem) { item in
             SafariView(url: item.url).ignoresSafeArea()
@@ -71,7 +85,14 @@ struct CardDetailView: View {
             VStack {
                 Spacer()
                 Button {
-                    safariItem = SafariItem(url: url)
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                        pendingLink = PendingLink(
+                            url: url,
+                            domain: url.host ?? "",
+                            trusted: linkTrusted,
+                            kindLabel: sourceSubtitle
+                        )
+                    }
                 } label: {
                     HStack(spacing: 9) {
                         Text(primaryTitle)
@@ -197,9 +218,14 @@ struct CardDetailView: View {
                     .frame(width: 35, height: 35)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(hex: 0x252529)))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(sourceTitle)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Color.inkText)
+                    HStack(spacing: 4) {
+                        Text(sourceTitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.inkText)
+                        if linkTrusted {
+                            TrustedSeal(size: 12)
+                        }
+                    }
                     Text(sourceSubtitle)
                         .font(.system(size: 10))
                         .foregroundStyle(Color(hex: 0x90909A))
@@ -276,6 +302,101 @@ struct CardDetailView: View {
         card.shopping?.link.verified == true
     }
 
+    private var linkTrusted: Bool {
+        if let link = card.shopping?.link { return link.trusted }
+        // Place links are always Naver Maps URLs we construct server-side;
+        // the trusted flag for them is derivable from the host alone.
+        if let raw = card.place?.naverPlaceUrl, let host = URL(string: raw)?.host {
+            return host == "naver.com" || host.hasSuffix(".naver.com")
+        }
+        return false
+    }
+
+    // MARK: link confirmation overlay
+
+    private func linkConfirmOverlay(_ pending: PendingLink) -> some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.55)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    withAnimation(.easeOut(duration: 0.2)) { pendingLink = nil }
+                }
+            VStack(spacing: 0) {
+                Capsule()
+                    .fill(Color.white.opacity(0.18))
+                    .frame(width: 36, height: 4)
+                    .padding(.top, 10)
+
+                Image(systemName: "globe")
+                    .font(.system(size: 21))
+                    .foregroundStyle(Color(hex: 0xA6A6B0))
+                    .frame(width: 48, height: 48)
+                    .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(Color(hex: 0x252529)))
+                    .padding(.top, 18)
+
+                HStack(spacing: 5) {
+                    Text(pending.domain)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.inkText)
+                    if pending.trusted {
+                        TrustedSeal(size: 15)
+                    }
+                }
+                .padding(.top, 12)
+
+                Text(pending.trusted ? "인증된 판매처예요 · \(pending.kindLabel)" : pending.kindLabel)
+                    .font(.system(size: 12))
+                    .foregroundStyle(pending.trusted ? Color(hex: 0x6FA8FF) : Color.inkMuted)
+                    .padding(.top, 4)
+
+                Text(pending.url.absoluteString)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.inkMuted)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 12)
+
+                Button {
+                    let url = pending.url
+                    pendingLink = nil
+                    safariItem = SafariItem(url: url)
+                } label: {
+                    Text("링크 열기")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.inkAccent))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+
+                Button {
+                    withAnimation(.easeOut(duration: 0.2)) { pendingLink = nil }
+                } label: {
+                    Text("취소")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color.inkMuted)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .padding(.top, 4)
+                .padding(.bottom, 20)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color.inkElevated)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .stroke(Color.white.opacity(0.08))
+                    )
+            )
+            .padding(.horizontal, 10)
+            .padding(.bottom, 8)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+        .zIndex(30)
+    }
+
     private var primaryURL: URL? {
         if let link = card.shopping?.link { return URL(string: link.url) }
         if let raw = card.place?.naverPlaceUrl { return URL(string: raw) }
@@ -288,5 +409,17 @@ struct CardDetailView: View {
         case .place: return "네이버 지도에서 열기"
         case .generic: return "열기"
         }
+    }
+}
+
+/// Verified-style safety badge for well-known retailer/portal domains.
+struct TrustedSeal: View {
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: "checkmark.seal.fill")
+            .font(.system(size: size))
+            .foregroundStyle(Color(hex: 0x4C8DFF))
+            .accessibilityLabel("인증된 도메인")
     }
 }

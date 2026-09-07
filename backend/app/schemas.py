@@ -9,6 +9,8 @@ class Link(BaseModel):
     domain: str
     verified: bool
     kind: Literal["product", "search_results"]
+    # Well-known retailer/portal domain (display-level safety badge).
+    trusted: bool = False
 
 
 class ShoppingPayload(BaseModel):
