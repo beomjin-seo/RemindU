@@ -6,12 +6,14 @@ struct CaptureInboxApp: App {
         WindowGroup {
             TabView {
                 InboxView()
-                    .tabItem { Label("Inbox", systemImage: "tray.full") }
+                    .tabItem { Label("모아보기", systemImage: "square.stack") }
                 MapTabView()
-                    .tabItem { Label("Map", systemImage: "map") }
+                    .tabItem { Label("지도", systemImage: "map") }
                 SettingsView()
-                    .tabItem { Label("Settings", systemImage: "gearshape") }
+                    .tabItem { Label("설정", systemImage: "gearshape") }
             }
+            .tint(.inkText)
+            .preferredColorScheme(.dark)
         }
     }
 }

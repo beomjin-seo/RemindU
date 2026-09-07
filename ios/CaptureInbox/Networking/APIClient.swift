@@ -75,6 +75,10 @@ struct APIClient {
         return encoder
     }()
 
+    static func captureImageURL(captureId: String) -> URL {
+        AppConfig.serverURL.appendingPathComponent("v1/captures/\(captureId)/image")
+    }
+
     func fetchCards(type: CardType? = nil, cursor: String? = nil, limit: Int = 20) async throws -> CardsPage {
         var query = [URLQueryItem(name: "limit", value: String(limit))]
         if let type { query.append(URLQueryItem(name: "type", value: type.rawValue)) }

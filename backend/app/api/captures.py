@@ -1,6 +1,8 @@
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 
 from app.models import Capture
 from app.pipeline.runner import process_capture
@@ -63,3 +65,17 @@ def get_capture(capture_id: str, request: Request) -> CaptureStatusOut:
         return CaptureStatusOut(
             capture_id=capture.id, status=capture.status, card_id=capture.card_id
         )
+
+
+@router.get("/{capture_id}/image")
+def get_capture_image(capture_id: str, request: Request) -> FileResponse:
+    session_factory = request.app.state.session_factory
+    with session_factory() as session:
+        capture = session.get(Capture, capture_id)
+        if capture is None:
+            raise HTTPException(status_code=404, detail="capture not found")
+        image_path = Path(capture.image_path)
+    if not image_path.is_file():
+        raise HTTPException(status_code=404, detail="capture image missing")
+    media_type = "image/jpeg" if image_path.suffix in (".jpg", ".jpeg") else "image/png"
+    return FileResponse(image_path, media_type=media_type)

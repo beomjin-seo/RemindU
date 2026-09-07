@@ -235,3 +235,13 @@ def test_healthz(make_client):
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_capture_image_served(make_client, png_upload):
+    client = make_client(GENERIC_EXTRACTION)
+    card = upload_and_resolve(client, png_upload)
+
+    response = client.get(f"/v1/captures/{card['capture_id']}/image")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.content[:8] == b"\x89PNG\r\n\x1a\n"

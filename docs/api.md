@@ -23,6 +23,11 @@ Upload a screenshot for processing.
 Processing runs asynchronously via FastAPI `BackgroundTasks`; the client polls
 `GET /v1/captures/{capture_id}` until the status changes.
 
+### GET /v1/captures/{capture_id}/image
+
+Returns the stored screenshot bytes for a capture (`image/jpeg` or
+`image/png`). Used by clients to render card thumbnails.
+
 ### GET /v1/captures/{capture_id}
 
 ```json
