@@ -1,11 +1,18 @@
+import PhotosUI
 import SwiftUI
 
 /// Dark-concept library: scattered screenshots gather into a 3-column grid
 /// (ui-prototype/dark.html). Tapping a shot opens the detail overlay.
 struct InboxView: View {
+    @EnvironmentObject private var router: AppRouter
+
     @State private var cards: [Card] = []
     @State private var errorMessage: String?
     @State private var selected: Card?
+
+    // Secondary capture entry: PhotosPicker needs no photo permission.
+    @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var importing = false
 
     // Intro animation state.
     @State private var gathered = false
@@ -13,6 +20,9 @@ struct InboxView: View {
     @State private var statusText: String?
     @State private var hasPlayedIntro = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let ocrMaxPixelSize = 2000
+    private static let resolvePollAttempts = 15
 
     private let columns = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
 
@@ -38,6 +48,7 @@ struct InboxView: View {
             }
             .refreshable { await load() }
 
+            pickerButton
             statusPill
 
             if let card = selected {
@@ -53,7 +64,18 @@ struct InboxView: View {
                 ))
             }
         }
-        .task { await load() }
+        .task {
+            if let cardId = router.pendingCardId { await openCard(id: cardId) }
+            await load()
+        }
+        .onChange(of: router.pendingCardId) { _, cardId in
+            guard let cardId else { return }
+            Task { await openCard(id: cardId) }
+        }
+        .onChange(of: pickerItems) { _, items in
+            guard !items.isEmpty else { return }
+            Task { await importPicked(items) }
+        }
     }
 
     // MARK: header
@@ -138,7 +160,7 @@ struct InboxView: View {
             Text(errorMessage == nil ? "아직 스크린샷이 없어요" : "불러오지 못했어요")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color.inkText)
-            Text(errorMessage ?? "공유 시트에서 Capture Inbox로 스크린샷을 보내보세요.")
+            Text(errorMessage ?? "공유 시트에서 Capture Inbox로 보내거나, + 버튼으로 스크린샷을 고르세요.")
                 .font(.system(size: 12))
                 .foregroundStyle(Color.inkMuted)
                 .multilineTextAlignment(.center)
@@ -159,6 +181,28 @@ struct InboxView: View {
         .padding(.top, 23)
     }
 
+    private var pickerButton: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                PhotosPicker(selection: $pickerItems, maxSelectionCount: 10, matching: .screenshots) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(Circle().fill(Color.inkAccent))
+                        .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
+                }
+                .disabled(importing)
+                .opacity(importing ? 0.5 : 1)
+                .accessibilityLabel("스크린샷 추가")
+                .padding(.trailing, 22)
+                .padding(.bottom, 20)
+            }
+        }
+    }
+
     private var statusPill: some View {
         VStack {
             Spacer()
@@ -169,6 +213,7 @@ struct InboxView: View {
                         .foregroundStyle(Color(hex: 0xA6BFFF))
                     Text(statusText)
                         .font(.system(size: 12, weight: .medium))
+                        .monospacedDigit()
                         .foregroundStyle(Color.inkText)
                 }
                 .padding(.horizontal, 16)
@@ -238,6 +283,58 @@ struct InboxView: View {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.9)) {
                 selected = nil
                 cards.removeAll { $0.id == card.id }
+            }
+        }
+    }
+
+    // MARK: push routing
+
+    @MainActor
+    private func openCard(id: String) async {
+        defer { router.pendingCardId = nil }
+        guard let card = try? await APIClient.shared.fetchCard(id: id) else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { selected = card }
+    }
+
+    // MARK: in-app picker import
+
+    @MainActor
+    private func importPicked(_ items: [PhotosPickerItem]) async {
+        importing = true
+        var captureIds: [String] = []
+        for (index, item) in items.enumerated() {
+            statusText = "\(index + 1)/\(items.count) 저장 중"
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            // On-device OCR: only text and a thumbnail reach the server.
+            let ocrText = (try? await ScreenshotOCR.recognizeText(
+                in: data, maxPixelSize: Self.ocrMaxPixelSize
+            )) ?? ""
+            if let created = try? await APIClient.shared.uploadCapture(
+                imageData: data, ocrText: ocrText, sourceHint: "picker"
+            ) {
+                captureIds.append(created.captureId)
+            }
+        }
+        pickerItems = []
+        statusText = "링크를 찾는 중"
+        await waitForResolution(captureIds)
+        await load()
+        statusText = "\(captureIds.count)/\(items.count)개 저장했어요"
+        try? await Task.sleep(for: .milliseconds(1400))
+        statusText = nil
+        importing = false
+    }
+
+    /// Cards appear only once the server pipeline resolves a capture; wait
+    /// briefly so the refresh after an import actually shows the new cards.
+    private func waitForResolution(_ captureIds: [String]) async {
+        var pending = Set(captureIds)
+        for _ in 0..<Self.resolvePollAttempts where !pending.isEmpty {
+            try? await Task.sleep(for: .seconds(1))
+            for id in pending {
+                if let state = try? await APIClient.shared.fetchCapture(id: id), state.status != .processing {
+                    pending.remove(id)
+                }
             }
         }
     }

@@ -9,9 +9,10 @@ dependencies = [
     "sqlalchemy>=2.0",
     "pydantic>=2",
     "pydantic-settings",
-    "httpx",
+    "httpx[http2]",
     "anthropic",
     "python-multipart",
+    "pyjwt[crypto]>=2.14.0",
 ]
 
 [dependency-groups]

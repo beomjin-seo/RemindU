@@ -176,9 +176,87 @@ struct CardDetailView: View {
             sourceRow
                 .padding(.top, 22)
 
+            candidatesSection
+
             notThisButton
                 .padding(.top, 18)
         }
+    }
+
+    // MARK: candidate links
+
+    /// Ranked alternatives to the primary link, so a wrong best guess is one
+    /// tap from the right page. Rows never open directly: every tap goes
+    /// through the same link-confirm overlay as the primary action.
+    private var extraCandidates: [ShoppingCandidate] {
+        guard let shopping = card.shopping else { return [] }
+        return Array(shopping.candidates.filter { $0.url != shopping.link.url }.prefix(3))
+    }
+
+    @ViewBuilder
+    private var candidatesSection: some View {
+        if !extraCandidates.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("후보 링크")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color(hex: 0x90909A))
+                    .padding(.top, 22)
+                    .padding(.bottom, 4)
+                ForEach(Array(extraCandidates.enumerated()), id: \.element.url) { index, candidate in
+                    candidateRow(rank: index + 1, candidate: candidate)
+                }
+            }
+        }
+    }
+
+    private func candidateRow(rank: Int, candidate: ShoppingCandidate) -> some View {
+        Button {
+            guard let url = URL(string: candidate.url) else { return }
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                pendingLink = PendingLink(
+                    url: url,
+                    domain: candidate.domain,
+                    trusted: candidate.trusted,
+                    kindLabel: candidate.verified ? "검증된 상품 링크" : "검증되지 않은 후보 링크"
+                )
+            }
+        } label: {
+            HStack(spacing: 11) {
+                Text("\(rank)")
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(Color(hex: 0xA6A6B0))
+                    .frame(width: 35, height: 35)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(hex: 0x252529)))
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text(candidate.title.isEmpty ? candidate.domain : candidate.title)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Color.inkText)
+                            .lineLimit(1)
+                        if candidate.trusted {
+                            TrustedSeal(size: 12)
+                        }
+                    }
+                    HStack(spacing: 6) {
+                        Text(candidate.domain)
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color(hex: 0x90909A))
+                        if candidate.verified {
+                            Text("검증됨")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Color.confidenceHigh)
+                        }
+                    }
+                }
+                Spacer()
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0x8C8D98))
+            }
+            .padding(.vertical, 9)
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

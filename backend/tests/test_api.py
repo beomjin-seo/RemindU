@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-from app.pipeline.extraction import CaptureExtraction
+from app.pipeline.extraction import CaptureExtraction, FakeExtractor, RoutingExtractor
 from app.pipeline.search.base import PlaceResult, SearchResult
 
 SHOPPING_EXTRACTION = CaptureExtraction(
@@ -26,19 +26,139 @@ GENERIC_EXTRACTION = CaptureExtraction(
 
 CANDIDATE_URL = "https://store.example.com/products/airmax97"
 
+OCR_TEXT = "www.musinsa.com\nNike Air Max 97\n129,000원\n세일 마감 D-3"
 
-def upload_and_resolve(client, png_upload):
-    response = client.post("/v1/captures", files=png_upload, data={"source_hint": "share-ext"})
+
+def upload(client, png_upload, ocr_text=None):
+    data = {"source_hint": "share-ext"}
+    if ocr_text is not None:
+        data["ocr_text"] = ocr_text
+    response = client.post("/v1/captures", files=png_upload, data=data)
     assert response.status_code == 201
     body = response.json()
     assert body["status"] == "processing"
-    capture_id = body["capture_id"]
 
     # TestClient runs BackgroundTasks before returning, so one poll suffices.
-    status = client.get(f"/v1/captures/{capture_id}").json()
+    return client.get(f"/v1/captures/{body['capture_id']}").json()
+
+
+def upload_and_resolve(client, png_upload, ocr_text=None):
+    status = upload(client, png_upload, ocr_text)
     assert status["status"] == "resolved", status
     assert status["card_id"]
+    assert status["failure_reason"] is None
     return client.get(f"/v1/cards/{status['card_id']}").json()
+
+
+def test_upload_with_ocr_text_uses_text_extractor(make_client, png_upload):
+    # Contract A + privacy invariant: usable OCR text routes to the text-only
+    # extractor; the image extractor is never touched.
+    text_fake = FakeExtractor(SHOPPING_EXTRACTION)
+    image_fake = FakeExtractor(GENERIC_EXTRACTION)
+    client = make_client(
+        SHOPPING_EXTRACTION,
+        search_results=[SearchResult(url=CANDIDATE_URL, title="Nike Air Max 97")],
+        pages={CANDIDATE_URL: "<html>Nike Air Max 97 129,000</html>"},
+        extractor=RoutingExtractor(text_fake, image_fake, allow_image=False),
+    )
+    card = upload_and_resolve(client, png_upload, ocr_text=OCR_TEXT)
+
+    assert card["type"] == "shopping"
+    assert card["shopping"]["link"]["verified"] is True
+    assert [call["ocr_text"] for call in text_fake.calls] == [OCR_TEXT]
+    assert text_fake.calls[0]["source_hint"] == "share-ext"
+    assert image_fake.calls == []
+
+
+def test_upload_without_ocr_text_fails_no_text_by_default(make_client, png_upload):
+    # Contract D + privacy invariant: with image extraction disabled (default),
+    # a capture without OCR text fails closed and no pixels reach any extractor.
+    text_fake = FakeExtractor(SHOPPING_EXTRACTION)
+    image_fake = FakeExtractor(SHOPPING_EXTRACTION)
+    client = make_client(
+        SHOPPING_EXTRACTION,
+        extractor=RoutingExtractor(text_fake, image_fake, allow_image=False),
+    )
+    status = upload(client, png_upload)
+
+    assert status["status"] == "failed"
+    assert status["failure_reason"] == "no_text"
+    assert status["card_id"] is None
+    assert text_fake.calls == [] and image_fake.calls == []
+    assert client.get("/v1/cards").json()["cards"] == []
+
+
+def test_short_ocr_text_is_treated_as_no_text(make_client, png_upload):
+    client = make_client(
+        SHOPPING_EXTRACTION,
+        extractor=RoutingExtractor(FakeExtractor(SHOPPING_EXTRACTION), None, allow_image=False),
+    )
+    status = upload(client, png_upload, ocr_text="ab  c\n")
+    assert status["status"] == "failed"
+    assert status["failure_reason"] == "no_text"
+
+
+def test_upload_without_ocr_text_uses_image_when_allowed(make_client, png_upload):
+    text_fake = FakeExtractor(SHOPPING_EXTRACTION)
+    image_fake = FakeExtractor(GENERIC_EXTRACTION)
+    client = make_client(
+        GENERIC_EXTRACTION,
+        extractor=RoutingExtractor(text_fake, image_fake, allow_image=True),
+    )
+    card = upload_and_resolve(client, png_upload)
+
+    assert card["type"] == "generic"
+    assert text_fake.calls == []
+    assert len(image_fake.calls) == 1
+
+
+def test_extractor_crash_sets_extraction_failed(make_client, png_upload):
+    class BoomExtractor:
+        def extract(self, image_bytes, media_type, source_hint=None, ocr_text=None):
+            raise RuntimeError("api down")
+
+    client = make_client(SHOPPING_EXTRACTION, extractor=BoomExtractor())
+    status = upload(client, png_upload, ocr_text=OCR_TEXT)
+
+    assert status["status"] == "failed"
+    assert status["failure_reason"] == "extraction_failed"
+    assert status["card_id"] is None
+
+
+def test_shopping_candidates_top_three_with_per_candidate_verification(make_client, png_upload):
+    # Contract B: verification is attempted on the top 3 ranked candidates in
+    # order; link = first verified one; the rest stay listed with verified=false.
+    urls = [f"https://mall{i}.example.com/p/{i}" for i in range(4)]
+    client = make_client(
+        SHOPPING_EXTRACTION,
+        search_results=[SearchResult(url=url, title=f"Result {i}") for i, url in enumerate(urls)],
+        pages={
+            urls[0]: "<html>unrelated page</html>",
+            urls[1]: "<html>Nike Air Max 97 129,000</html>",
+            urls[2]: "<html>another unrelated page</html>",
+            # urls[3] is never fetched: only the top 3 are verified.
+        },
+    )
+    card = upload_and_resolve(client, png_upload)
+
+    shopping = card["shopping"]
+    assert shopping["link"]["url"] == urls[1]
+    assert shopping["link"]["verified"] is True
+    assert shopping["link"]["kind"] == "product"
+    candidates = shopping["candidates"]
+    assert [c["url"] for c in candidates] == urls[:3]
+    assert [c["verified"] for c in candidates] == [False, True, False]
+    assert all(c["kind"] == "product" and c["trusted"] is False for c in candidates)
+    assert candidates[1]["title"] == "Result 1"
+    assert candidates[1]["domain"] == "mall1.example.com"
+
+
+def test_shopping_candidates_empty_when_search_returns_nothing(make_client, png_upload):
+    client = make_client(SHOPPING_EXTRACTION, search_results=[], pages={})
+    card = upload_and_resolve(client, png_upload)
+
+    assert card["shopping"]["candidates"] == []
+    assert card["shopping"]["link"]["kind"] == "search_results"
 
 
 def test_shopping_pipeline_verified_link(make_client, png_upload):
@@ -164,6 +284,57 @@ def test_shopping_store_name_ranks_matching_mall_first(make_client, png_upload):
     card = upload_and_resolve(client, png_upload)
 
     assert card["shopping"]["link"]["url"] == official_url
+
+
+def test_shopping_deadline_text_parsed_into_deadline_at(make_client, png_upload):
+    from datetime import datetime, timedelta, timezone
+
+    extraction = SHOPPING_EXTRACTION.model_copy(update={"deadline_text": "9월 12일 오후 6시까지"})
+    client = make_client(extraction, search_results=[], pages={})
+    card = upload_and_resolve(client, png_upload)
+
+    deadline_at = datetime.fromisoformat(card["shopping"]["deadline_at"])
+    assert (deadline_at.month, deadline_at.day, deadline_at.hour, deadline_at.minute) == (9, 12, 18, 0)
+    assert deadline_at.utcoffset() == timedelta(hours=9)
+    assert card["shopping"]["deadline_text"] == "9월 12일 오후 6시까지"
+
+    # Relative text never schedules a deadline.
+    vague = SHOPPING_EXTRACTION.model_copy(update={"deadline_text": "곧 마감"})
+    client = make_client(vague, search_results=[], pages={})
+    card = upload_and_resolve(client, png_upload)
+    assert card["shopping"]["deadline_at"] is None
+
+
+def test_resolved_push_sent_to_registered_devices(make_client, png_upload):
+    client = make_client(SHOPPING_EXTRACTION, search_results=[], pages={})
+    assert client.post("/v1/devices", json={"apns_token": "tok1"}).status_code == 204
+    card = upload_and_resolve(client, png_upload)
+
+    sender = client.app.state.push_sender
+    assert [token for token, _ in sender.sent] == ["tok1"]
+    payload = sender.sent[0][1]
+    assert payload["kind"] == "resolved"
+    assert payload["card_id"] == card["id"]
+    assert payload["aps"]["alert"]["title"] == "찾았어요: Nike Air Max 97"
+    assert payload["aps"]["sound"] == "default"
+
+
+def test_resolved_push_disabled_by_setting(make_client, png_upload):
+    client = make_client(SHOPPING_EXTRACTION, search_results=[], pages={}, push_on_resolved=False)
+    client.post("/v1/devices", json={"apns_token": "tok1"})
+    upload_and_resolve(client, png_upload)
+    assert client.app.state.push_sender.sent == []
+
+
+def test_failed_capture_sends_no_push(make_client, png_upload):
+    client = make_client(
+        SHOPPING_EXTRACTION,
+        extractor=RoutingExtractor(FakeExtractor(SHOPPING_EXTRACTION), None, allow_image=False),
+    )
+    client.post("/v1/devices", json={"apns_token": "tok1"})
+    status = upload(client, png_upload)
+    assert status["status"] == "failed"
+    assert client.app.state.push_sender.sent == []
 
 
 def test_capture_upload_rejects_unsupported_content_type(make_client):

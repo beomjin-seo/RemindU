@@ -10,37 +10,10 @@ enum AppConfig {
     }
 }
 
-/// Small reusable multipart/form-data body builder.
-struct MultipartFormData {
-    let boundary = "Boundary-\(UUID().uuidString)"
-    private var body = Data()
-
-    var contentType: String { "multipart/form-data; boundary=\(boundary)" }
-
-    mutating func addField(name: String, value: String) {
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8))
-        body.append(Data("\(value)\r\n".utf8))
-    }
-
-    mutating func addFile(name: String, filename: String, mimeType: String, data: Data) {
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n".utf8))
-        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
-        body.append(data)
-        body.append(Data("\r\n".utf8))
-    }
-
-    func finalized() -> Data {
-        var result = body
-        result.append(Data("--\(boundary)--\r\n".utf8))
-        return result
-    }
-}
-
 enum APIError: Error {
     case invalidURL
     case badStatus(Int)
+    case unsupportedImage
 }
 
 struct APIClient {
@@ -97,11 +70,15 @@ struct APIClient {
         return try await send(request, decoding: CaptureState.self)
     }
 
-    func uploadCapture(imageData: Data, sourceHint: String? = nil) async throws -> CaptureCreated {
+    /// `ocrText` is the on-device Vision output (newline-separated lines); the
+    /// server extracts from it instead of the pixels.
+    func uploadCapture(imageData: Data, ocrText: String? = nil, sourceHint: String? = nil) async throws -> CaptureCreated {
+        guard let upload = ImageUpload.normalize(imageData) else { throw APIError.unsupportedImage }
         var request = try makeRequest(path: "/v1/captures")
         request.httpMethod = "POST"
         var form = MultipartFormData()
-        form.addFile(name: "image", filename: "capture.jpg", mimeType: "image/jpeg", data: imageData)
+        form.addFile(name: "image", filename: upload.filename, mimeType: upload.mimeType, data: upload.data)
+        if let ocrText { form.addField(name: "ocr_text", value: ocrText) }
         if let sourceHint { form.addField(name: "source_hint", value: sourceHint) }
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
         request.httpBody = form.finalized()

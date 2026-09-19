@@ -19,6 +19,10 @@ async def create_capture(
     background_tasks: BackgroundTasks,
     image: UploadFile = File(...),
     source_hint: str | None = Form(None),
+    # Newline-separated lines recognized on-device (Vision framework). This is
+    # the default extraction input; the image itself is only analyzed when
+    # ALLOW_IMAGE_EXTRACTION is enabled server-side.
+    ocr_text: str | None = Form(None),
 ) -> CaptureCreatedOut:
     settings = request.app.state.settings
     session_factory = request.app.state.session_factory
@@ -46,6 +50,7 @@ async def create_capture(
                 id=capture_id,
                 status="processing",
                 source_hint=source_hint,
+                ocr_text=(ocr_text or "").strip() or None,
                 image_path=str(image_path),
             )
         )
@@ -63,7 +68,10 @@ def get_capture(capture_id: str, request: Request) -> CaptureStatusOut:
         if capture is None:
             raise HTTPException(status_code=404, detail="capture not found")
         return CaptureStatusOut(
-            capture_id=capture.id, status=capture.status, card_id=capture.card_id
+            capture_id=capture.id,
+            status=capture.status,
+            card_id=capture.card_id,
+            failure_reason=capture.failure_reason,
         )
 
 

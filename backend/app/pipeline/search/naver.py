@@ -32,6 +32,12 @@ class _NaverClientBase:
 
 
 class NaverShoppingClient(_NaverClientBase):
+    """DEPRECATED: the Naver Shopping search API (/v1/search/shop.json) was
+    permanently terminated on 2026-07-31. Kept for reference only and no longer
+    part of the default wiring; use ElevenStClient + GoogleCSEClient via
+    CompositeSearchClient instead. NaverLocalClient is unaffected (legacy keys
+    remain valid until 2027-06-30)."""
+
     def search(self, query: str, limit: int = 5) -> list[SearchResult]:
         headers = self._headers()
         response = httpx.get(

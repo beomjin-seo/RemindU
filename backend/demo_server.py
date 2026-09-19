@@ -19,6 +19,7 @@ from app.main import create_app
 from app.pipeline.extraction import CaptureExtraction
 from app.pipeline.search.base import PlaceResult
 from app.pipeline.search.fake import FakeSearchClient
+from app.workers.apns import FakePushSender
 
 _BACKEND_DIR = Path(__file__).resolve().parent
 
@@ -49,7 +50,11 @@ class DemoExtractor:
         self._calls = 0
 
     def extract(
-        self, image_bytes: bytes, media_type: str, source_hint: str | None = None
+        self,
+        image_bytes: bytes,
+        media_type: str,
+        source_hint: str | None = None,
+        ocr_text: str | None = None,
     ) -> CaptureExtraction:
         self._calls += 1
         return _SHOPPING if self._calls % 2 == 1 else _PLACE
@@ -80,4 +85,7 @@ app = create_app(
     extractor=DemoExtractor(),
     search_client=_search,
     local_client=_search,
+    # Pushes are logged (INFO) rather than delivered; paste the logged payload
+    # into `xcrun simctl push booted com.captureinbox.app payload.json`.
+    push_sender=FakePushSender(),
 )

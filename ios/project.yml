@@ -12,6 +12,7 @@ targets:
     platform: iOS
     sources:
       - CaptureInbox
+      - Shared
     dependencies:
       - target: ShareExtension
         embed: true
@@ -19,6 +20,10 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.captureinbox.app
+    entitlements:
+      path: Support/CaptureInbox.entitlements
+      properties:
+        aps-environment: development
     info:
       path: Support/CaptureInbox-Info.plist
       properties:
@@ -33,6 +38,7 @@ targets:
     platform: iOS
     sources:
       - ShareExtension
+      - Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.captureinbox.app.share

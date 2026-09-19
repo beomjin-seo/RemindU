@@ -1,13 +1,17 @@
 import UIKit
 import UniformTypeIdentifiers
 
-/// Minimal share-extension UI: receive one image, upload it, show the result, dismiss.
-/// The 2-tap capture path is the core product experience, so every code path
-/// must end in completeRequest/cancelRequest — never leave the sheet hanging.
+/// Minimal share-extension UI: receive one image, read its text on device,
+/// upload both, show the result, dismiss. The 2-tap capture path is the core
+/// product experience, so every code path must end in
+/// completeRequest/cancelRequest — never leave the sheet hanging.
 final class ShareViewController: UIViewController {
     // TODO: share the server URL with the main app via an App Group once
     // signing/entitlements are set up; until then both sides default to localhost.
     private static let defaultServerURL = "http://localhost:8000"
+    // Long-edge cap for the OCR decode; keeps 3x screenshots inside the
+    // extension's memory budget. The original bytes are still uploaded.
+    private static let ocrMaxPixelSize = 2000
 
     private let statusLabel = UILabel()
     private let spinner = UIActivityIndicatorView(style: .large)
@@ -26,7 +30,7 @@ final class ShareViewController: UIViewController {
         view.addSubview(spinner)
 
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-        statusLabel.text = "Saving…"
+        statusLabel.text = "글자 읽는 중…"
         statusLabel.font = .preferredFont(forTextStyle: .headline)
         statusLabel.textAlignment = .center
         view.addSubview(statusLabel)
@@ -56,11 +60,13 @@ final class ShareViewController: UIViewController {
                 self.finish(success: false, message: "Could not read image")
                 return
             }
-            guard let data = Self.imageData(from: value) else {
+            guard let raw = Self.imageData(from: value), let upload = ImageUpload.normalize(raw) else {
                 self.finish(success: false, message: "Unsupported image")
                 return
             }
-            self.upload(imageData: data)
+            Task { @MainActor in
+                await self.recognizeAndUpload(upload)
+            }
         }
     }
 
@@ -78,31 +84,38 @@ final class ShareViewController: UIViewController {
         }
     }
 
-    private func upload(imageData: Data) {
-        guard let url = URL(string: Self.defaultServerURL + "/v1/captures") else {
-            finish(success: false, message: "Bad server URL")
-            return
+    @MainActor
+    private func recognizeAndUpload(_ upload: ImageUpload) async {
+        statusLabel.text = "글자 읽는 중…"
+        // A Vision failure degrades to empty ocr_text, which the server fails
+        // closed as no_text instead of guessing from pixels.
+        let ocrText = (try? await ScreenshotOCR.recognizeText(
+            in: upload.data, maxPixelSize: Self.ocrMaxPixelSize
+        )) ?? ""
+        statusLabel.text = "Saving…"
+        do {
+            try await send(upload, ocrText: ocrText)
+            finish(success: true, message: "Saved")
+        } catch {
+            finish(success: false, message: "Upload failed")
         }
+    }
 
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var body = Data()
-        body.append(Data("--\(boundary)\r\n".utf8))
-        body.append(Data("Content-Disposition: form-data; name=\"image\"; filename=\"capture.jpg\"\r\n".utf8))
-        body.append(Data("Content-Type: image/jpeg\r\n\r\n".utf8))
-        body.append(imageData)
-        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+    private func send(_ upload: ImageUpload, ocrText: String) async throws {
+        guard let url = URL(string: Self.defaultServerURL + "/v1/captures") else {
+            throw URLError(.badURL)
+        }
+        var form = MultipartFormData()
+        form.addFile(name: "image", filename: upload.filename, mimeType: upload.mimeType, data: upload.data)
+        form.addField(name: "ocr_text", value: ocrText)
+        form.addField(name: "source_hint", value: "share")
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = body
-
-        let task = URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            let ok = error == nil && (200..<300).contains(status)
-            self?.finish(success: ok, message: ok ? "Saved" : "Upload failed")
-        }
-        task.resume()
+        request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
+        let (_, response) = try await URLSession.shared.upload(for: request, from: form.finalized())
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(status) else { throw URLError(.badServerResponse) }
     }
 
     private func finish(success: Bool, message: String) {

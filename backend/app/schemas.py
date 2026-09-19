@@ -13,6 +13,18 @@ class Link(BaseModel):
     trusted: bool = False
 
 
+class Candidate(BaseModel):
+    # A ranked search-API result with its own verification outcome. Never an
+    # LLM-generated URL. Clients must present verified=false candidates as
+    # "similar results", never as the definitive match.
+    url: str
+    domain: str
+    title: str
+    verified: bool
+    trusted: bool = False
+    kind: Literal["product", "search_results"]
+
+
 class ShoppingPayload(BaseModel):
     product_name: str
     brand: str | None = None
@@ -21,7 +33,10 @@ class ShoppingPayload(BaseModel):
     deadline_text: str | None = None
     deadline_at: datetime | None = None
     confidence: Literal["high", "medium", "low"]
+    # Best link: first verified candidate, else the search-results fallback.
     link: Link
+    # Up to 3 ranked candidates that verification was attempted on; may be empty.
+    candidates: list[Candidate] = []
 
 
 class PlacePayload(BaseModel):
@@ -72,6 +87,8 @@ class CaptureStatusOut(BaseModel):
     capture_id: str
     status: Literal["processing", "resolved", "failed"]
     card_id: str | None = None
+    # Non-null only when status == "failed".
+    failure_reason: str | None = None
 
 
 class FeedbackIn(BaseModel):

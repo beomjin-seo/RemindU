@@ -37,7 +37,28 @@ struct ShoppingPayload: Codable {
     let deadlineText: String?
     let deadlineAt: Date?
     let confidence: Confidence
+    /// Best link: first verified candidate, else a search-results fallback.
     let link: ShoppingLink
+    /// Ranked search candidates verification was attempted on (max 3).
+    let candidates: [ShoppingCandidate]
+
+    private enum CodingKeys: String, CodingKey {
+        case productName, brand, price, currency, deadlineText, deadlineAt, confidence, link, candidates
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        productName = try container.decode(String.self, forKey: .productName)
+        brand = try container.decodeIfPresent(String.self, forKey: .brand)
+        price = try container.decodeIfPresent(Int.self, forKey: .price)
+        currency = try container.decode(String.self, forKey: .currency)
+        deadlineText = try container.decodeIfPresent(String.self, forKey: .deadlineText)
+        deadlineAt = try container.decodeIfPresent(Date.self, forKey: .deadlineAt)
+        confidence = try container.decode(Confidence.self, forKey: .confidence)
+        link = try container.decode(ShoppingLink.self, forKey: .link)
+        // Older servers omit the key entirely.
+        candidates = try container.decodeIfPresent([ShoppingCandidate].self, forKey: .candidates) ?? []
+    }
 }
 
 struct ShoppingLink: Codable {
@@ -51,6 +72,15 @@ struct ShoppingLink: Codable {
     let verified: Bool
     let kind: Kind
     let trusted: Bool
+}
+
+struct ShoppingCandidate: Codable {
+    let url: String
+    let domain: String
+    let title: String
+    let verified: Bool
+    let trusted: Bool
+    let kind: ShoppingLink.Kind
 }
 
 struct PlacePayload: Codable {
@@ -87,6 +117,7 @@ struct CaptureState: Codable {
     let captureId: String
     let status: CaptureStatus
     let cardId: String?
+    let failureReason: String?
 }
 
 enum FeedbackKind: String, Codable {
