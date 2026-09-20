@@ -26,8 +26,8 @@ from sqlalchemy import select
 from app.config import Settings
 from app.db import create_tables, make_engine, make_session_factory
 from app.models import Card, NotificationLog
-from app.workers.apns import ApnsSender, PushSender, build_push_payload
-from app.workers.notifications import log_notification, notify_all_devices, should_notify
+from app.workers.apns import ApnsSender, PushSender
+from app.workers.notifications import push_once, should_notify
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +44,14 @@ def parse_price(html: str) -> int | None:
 def tracked_shopping_cards(session_factory) -> list[Card]:
     with session_factory() as session:
         alerted = select(NotificationLog.card_id).where(NotificationLog.kind == "price")
+        # Rejected ("not this") cards are never tracked.
         cards = session.scalars(
-            select(Card).where(Card.type == "shopping", Card.id.not_in(alerted))
+            select(Card).where(
+                Card.type == "shopping",
+                Card.status == "resolved",
+                Card.install_id.is_not(None),
+                Card.id.not_in(alerted),
+            )
         ).all()
     # Only verified product links are trackable; search_results fallbacks are not.
     return [card for card in cards if (card.payload.get("link") or {}).get("verified")]
@@ -70,22 +76,20 @@ def run_once(session_factory, sender: PushSender, now: datetime | None = None) -
             current_price=current_price,
         ):
             continue
-        # Log first, then send: the same card never gets a second price alert.
-        if not log_notification(session_factory, card.id, "price", now):
-            continue
         currency = payload.get("currency") or "KRW"
         amount = f"{current_price:,}원" if currency == "KRW" else f"{current_price:,} {currency}"
-        notify_all_devices(
+        # Logged before delivery: the same card never gets a second price alert.
+        if push_once(
             session_factory,
             sender,
-            build_push_payload(
-                title=f"가격 인하: {payload.get('product_name', '')}",
-                body=f"지금 {amount} · {link.get('domain', '')}",
-                card_id=card.id,
-                kind="price",
-            ),
-        )
-        sent += 1
+            card.id,
+            "price",
+            f"가격 인하: {payload.get('product_name', '')}",
+            f"지금 {amount} · {link.get('domain', '')}",
+            now,
+            card.install_id,
+        ):
+            sent += 1
     return sent
 
 

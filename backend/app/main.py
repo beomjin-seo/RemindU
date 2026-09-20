@@ -12,6 +12,7 @@ from app.pipeline.extraction import (
     RoutingExtractor,
     TextExtractor,
 )
+from app.pipeline.heuristic import HeuristicExtractor
 from app.pipeline.runner import PipelineDeps
 from app.pipeline.search.base import LocalSearchClient, SearchClient
 from app.pipeline.search.composite import CompositeSearchClient
@@ -25,10 +26,15 @@ from app.workers.apns import ApnsSender, PushSender
 def _default_extractor(settings: Settings) -> Extractor:
     # PRIVACY: text-only structuring of on-device OCR is the default; pixels
     # reach the model only when ALLOW_IMAGE_EXTRACTION is explicitly enabled.
+    # Without LLM credentials the rule-based tier structures the OCR text, so
+    # the pipeline runs end to end on real screenshots at zero cost.
+    text_extractor: Extractor = (
+        TextExtractor(model=settings.extractor_model, api_key=settings.anthropic_api_key)
+        if settings.anthropic_api_key
+        else HeuristicExtractor()
+    )
     return RoutingExtractor(
-        text_extractor=TextExtractor(
-            model=settings.extractor_model, api_key=settings.anthropic_api_key
-        ),
+        text_extractor=text_extractor,
         image_extractor=AnthropicExtractor(
             model=settings.extractor_model, api_key=settings.anthropic_api_key
         ),

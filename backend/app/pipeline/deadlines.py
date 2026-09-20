@@ -51,6 +51,14 @@ _LEAD_CUE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A start/release/shipping cue anywhere in the text marks an uncued date as
+# when something begins, not ends: "10월 5일 출시" is never a deadline.
+_NEGATIVE_CUE_RE = re.compile(
+    r"부터|출시|오픈|시작|발매|배송|도착|입고|예정"
+    r"|\bfrom\b|\brelease|\bstarts?\b|\blaunch|\bships?\b|\bdrops?\b|\bavailable\b",
+    re.IGNORECASE,
+)
+
 _PM_WORDS = {"오후", "저녁", "밤", "낮", "pm", "p.m."}
 _AM_WORDS = {"오전", "새벽", "아침", "am", "a.m."}
 
@@ -118,10 +126,10 @@ def parse_deadline(text: str | None, now: datetime) -> datetime | None:
     cued = [item for item in found if item.cued]
     if cued:
         pick = cued[-1]  # "9/5 ~ 9/12까지": the last cued date ends the period
-    elif len(found) == 1 and found[0].explicit_year:
+    elif len(found) == 1 and found[0].explicit_year and not _NEGATIVE_CUE_RE.search(text):
         pick = found[0]
     else:
-        return None  # nothing, or several dates with no cue -> ambiguous
+        return None  # nothing, a start date, or several uncued dates -> ambiguous
 
     try:
         if pick.year is not None:

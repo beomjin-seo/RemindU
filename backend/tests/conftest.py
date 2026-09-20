@@ -34,6 +34,7 @@ def make_client(tmp_path):
         *,
         extractor: Extractor | None = None,
         push_on_resolved: bool = True,
+        install_id: str = "install-a",
     ) -> TestClient:
         settings = Settings(
             _env_file=None,
@@ -59,6 +60,9 @@ def make_client(tmp_path):
             push_sender=FakePushSender(),  # reachable as client.app.state.push_sender
         )
         client = TestClient(app)
+        # Every /v1 request is scoped to an install; tests swap the header to
+        # act as another install.
+        client.headers["X-Install-Id"] = install_id
         client.__enter__()  # run lifespan (creates tables + data dir)
         created.append(client)
         return client

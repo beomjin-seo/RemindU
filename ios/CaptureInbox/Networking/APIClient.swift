@@ -1,15 +1,5 @@
 import Foundation
 
-enum AppConfig {
-    static let serverURLKey = "server_url"
-    static let defaultServerURL = "http://localhost:8000"
-
-    static var serverURL: URL {
-        let raw = UserDefaults.standard.string(forKey: serverURLKey) ?? defaultServerURL
-        return URL(string: raw) ?? URL(string: defaultServerURL)!
-    }
-}
-
 enum APIError: Error {
     case invalidURL
     case badStatus(Int)
@@ -49,7 +39,7 @@ struct APIClient {
     }()
 
     static func captureImageURL(captureId: String) -> URL {
-        AppConfig.serverURL.appendingPathComponent("v1/captures/\(captureId)/image")
+        AppGroup.serverURL.appendingPathComponent("v1/captures/\(captureId)/image")
     }
 
     func fetchCards(type: CardType? = nil, cursor: String? = nil, limit: Int = 20) async throws -> CardsPage {
@@ -102,13 +92,15 @@ struct APIClient {
     }
 
     private func makeRequest(path: String, query: [URLQueryItem] = []) throws -> URLRequest {
-        guard var components = URLComponents(url: AppConfig.serverURL, resolvingAgainstBaseURL: false) else {
+        guard var components = URLComponents(url: AppGroup.serverURL, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL
         }
         components.path = path
         if !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw APIError.invalidURL }
-        return URLRequest(url: url)
+        var request = URLRequest(url: url)
+        InstallIdentity.apply(to: &request)
+        return request
     }
 
     @discardableResult

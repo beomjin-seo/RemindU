@@ -317,26 +317,45 @@ struct InboxView: View {
         }
         pickerItems = []
         statusText = "링크를 찾는 중"
-        await waitForResolution(captureIds)
+        let states = await waitForResolution(captureIds)
         await load()
-        statusText = "\(captureIds.count)/\(items.count)개 저장했어요"
-        try? await Task.sleep(for: .milliseconds(1400))
+        if !captureIds.isEmpty { AppDelegate.requestPushPermissionIfNeeded() }
+        statusText = Self.importSummary(total: items.count, uploaded: captureIds.count, states: states)
+        try? await Task.sleep(for: .milliseconds(2200))
         statusText = nil
         importing = false
     }
 
+    /// Counts only captures that actually resolved into cards; an upload that
+    /// failed server-side (e.g. `no_text`) is reported, not announced as saved.
+    static func importSummary(total: Int, uploaded: Int, states: [String: CaptureState]) -> String {
+        let resolved = states.values.filter { $0.status == .resolved }.count
+        let unreadable = states.values.filter { $0.failureReason == "no_text" }.count
+        let otherFailures = states.values.filter { $0.status == .failed }.count - unreadable
+        let pending = uploaded - states.count
+        var parts = ["\(resolved)/\(total)개 저장했어요"]
+        if unreadable > 0 { parts.append("\(unreadable)개는 글자를 읽지 못했어요") }
+        if otherFailures > 0 { parts.append("\(otherFailures)개 실패") }
+        if pending > 0 { parts.append("\(pending)개 처리 중") }
+        return parts.joined(separator: " · ")
+    }
+
     /// Cards appear only once the server pipeline resolves a capture; wait
     /// briefly so the refresh after an import actually shows the new cards.
-    private func waitForResolution(_ captureIds: [String]) async {
+    /// Returns the final state of every capture that finished in time.
+    private func waitForResolution(_ captureIds: [String]) async -> [String: CaptureState] {
         var pending = Set(captureIds)
+        var finished: [String: CaptureState] = [:]
         for _ in 0..<Self.resolvePollAttempts where !pending.isEmpty {
             try? await Task.sleep(for: .seconds(1))
             for id in pending {
                 if let state = try? await APIClient.shared.fetchCapture(id: id), state.status != .processing {
                     pending.remove(id)
+                    finished[id] = state
                 }
             }
         }
+        return finished
     }
 }
 
@@ -350,17 +369,7 @@ struct ShotCell: View {
             Color.inkElevated
                 .aspectRatio(3.0 / 4.0, contentMode: .fit)
                 .overlay {
-                    AsyncImage(url: APIClient.captureImageURL(captureId: card.captureId)) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .failure:
-                            Image(systemName: "photo")
-                                .foregroundStyle(Color.inkMuted)
-                        default:
-                            ProgressView().tint(Color.inkMuted)
-                        }
-                    }
+                    RemoteImage(url: APIClient.captureImageURL(captureId: card.captureId))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(alignment: .bottomTrailing) {

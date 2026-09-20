@@ -24,7 +24,9 @@ GENERIC_EXTRACTION = CaptureExtraction(
     summary="A random note",
 )
 
-CANDIDATE_URL = "https://store.example.com/products/airmax97"
+# Allowlisted domain: only those can become a verified product link.
+CANDIDATE_URL = "https://kream.co.kr/products/airmax97"
+MATCHING_PAGE = "<html>Nike Air Max 97 129,000원</html>"
 
 OCR_TEXT = "www.musinsa.com\nNike Air Max 97\n129,000원\n세일 마감 D-3"
 
@@ -58,7 +60,7 @@ def test_upload_with_ocr_text_uses_text_extractor(make_client, png_upload):
     client = make_client(
         SHOPPING_EXTRACTION,
         search_results=[SearchResult(url=CANDIDATE_URL, title="Nike Air Max 97")],
-        pages={CANDIDATE_URL: "<html>Nike Air Max 97 129,000</html>"},
+        pages={CANDIDATE_URL: MATCHING_PAGE},
         extractor=RoutingExtractor(text_fake, image_fake, allow_image=False),
     )
     card = upload_and_resolve(client, png_upload, ocr_text=OCR_TEXT)
@@ -128,13 +130,18 @@ def test_extractor_crash_sets_extraction_failed(make_client, png_upload):
 def test_shopping_candidates_top_three_with_per_candidate_verification(make_client, png_upload):
     # Contract B: verification is attempted on the top 3 ranked candidates in
     # order; link = first verified one; the rest stay listed with verified=false.
-    urls = [f"https://mall{i}.example.com/p/{i}" for i in range(4)]
+    urls = [
+        "https://www.coupang.com/vp/products/0",
+        "https://www.musinsa.com/p/1",
+        "https://www.11st.co.kr/products/2",
+        "https://www.ssg.com/item/3",
+    ]
     client = make_client(
         SHOPPING_EXTRACTION,
         search_results=[SearchResult(url=url, title=f"Result {i}") for i, url in enumerate(urls)],
         pages={
             urls[0]: "<html>unrelated page</html>",
-            urls[1]: "<html>Nike Air Max 97 129,000</html>",
+            urls[1]: MATCHING_PAGE,
             urls[2]: "<html>another unrelated page</html>",
             # urls[3] is never fetched: only the top 3 are verified.
         },
@@ -148,9 +155,28 @@ def test_shopping_candidates_top_three_with_per_candidate_verification(make_clie
     candidates = shopping["candidates"]
     assert [c["url"] for c in candidates] == urls[:3]
     assert [c["verified"] for c in candidates] == [False, True, False]
-    assert all(c["kind"] == "product" and c["trusted"] is False for c in candidates)
+    assert all(c["kind"] == "product" and c["trusted"] is True for c in candidates)
     assert candidates[1]["title"] == "Result 1"
-    assert candidates[1]["domain"] == "mall1.example.com"
+    assert candidates[1]["domain"] == "www.musinsa.com"
+
+
+def test_off_allowlist_candidate_is_listed_but_never_verified(make_client, png_upload):
+    # Link-safety gate: a matching page on an unknown domain stays an
+    # unverified "similar result"; the card falls back to search results.
+    unknown_url = "https://store.example.com/products/airmax97"
+    client = make_client(
+        SHOPPING_EXTRACTION,
+        search_results=[SearchResult(url=unknown_url, title="Nike Air Max 97", price=129000)],
+        pages={unknown_url: MATCHING_PAGE},
+    )
+    card = upload_and_resolve(client, png_upload)
+
+    shopping = card["shopping"]
+    assert shopping["link"]["kind"] == "search_results"
+    assert shopping["link"]["verified"] is False
+    assert [(c["url"], c["verified"], c["trusted"]) for c in shopping["candidates"]] == [
+        (unknown_url, False, False)
+    ]
 
 
 def test_shopping_candidates_empty_when_search_returns_nothing(make_client, png_upload):
@@ -178,8 +204,8 @@ def test_shopping_pipeline_verified_link(make_client, png_upload):
     assert link["verified"] is True
     assert link["kind"] == "product"
     assert link["url"] == CANDIDATE_URL
-    assert link["domain"] == "store.example.com"
-    assert link["trusted"] is False  # unknown mall: no safety badge
+    assert link["domain"] == "kream.co.kr"
+    assert link["trusted"] is True  # verified implies allowlisted
 
 
 def test_shopping_pipeline_fallback_when_page_does_not_match(make_client, png_upload):
@@ -226,7 +252,7 @@ def test_shopping_retailer_candidate_verified_first(make_client, png_upload):
     # an earlier-listed candidate from another mall, so the card links to the
     # store the user was actually shopping at.
     extraction = SHOPPING_EXTRACTION.model_copy(update={"visible_domain": "m.coupang.com"})
-    other_url = "https://other-mall.example.com/p/1"
+    other_url = "https://www.ssg.com/item/1"
     coupang_url = "https://www.coupang.com/vp/products/123"
     client = make_client(
         extraction,
@@ -236,7 +262,7 @@ def test_shopping_retailer_candidate_verified_first(make_client, png_upload):
         ],
         pages={
             other_url: "<html>Buy Nike Air Max 97 for 129,000 won</html>",
-            coupang_url: "<html>Nike Air Max 97 129,000 free shipping</html>",
+            coupang_url: "<html>Nike Air Max 97 129,000원 free shipping</html>",
         },
     )
     card = upload_and_resolve(client, png_upload)
@@ -268,18 +294,15 @@ def test_shopping_store_name_ranks_matching_mall_first(make_client, png_upload):
     # No known retailer domain, but the screenshot showed the seller name ->
     # the candidate whose mall name (snippet) matches is verified first.
     extraction = SHOPPING_EXTRACTION.model_copy(update={"store_name": "나이키공식스토어"})
-    generic_url = "https://random-mall.example.com/p/9"
-    official_url = "https://official.example.com/airmax97"
+    generic_url = "https://www.11st.co.kr/products/9"
+    official_url = "https://brand.naver.com/nike/products/1"
     client = make_client(
         extraction,
         search_results=[
             SearchResult(url=generic_url, title="Nike Air Max 97", snippet="어떤몰"),
             SearchResult(url=official_url, title="Nike Air Max 97", snippet="나이키공식스토어"),
         ],
-        pages={
-            generic_url: "<html>Nike Air Max 97 129,000</html>",
-            official_url: "<html>Nike Air Max 97 129,000</html>",
-        },
+        pages={generic_url: MATCHING_PAGE, official_url: MATCHING_PAGE},
     )
     card = upload_and_resolve(client, png_upload)
 
@@ -315,8 +338,31 @@ def test_resolved_push_sent_to_registered_devices(make_client, png_upload):
     payload = sender.sent[0][1]
     assert payload["kind"] == "resolved"
     assert payload["card_id"] == card["id"]
-    assert payload["aps"]["alert"]["title"] == "찾았어요: Nike Air Max 97"
+    # Search-results fallback: nothing was found, so the push says "saved".
+    assert payload["aps"]["alert"]["title"] == "저장했어요: Nike Air Max 97"
     assert payload["aps"]["sound"] == "default"
+
+
+def test_resolved_push_says_found_only_for_verified_links(make_client, png_upload):
+    client = make_client(
+        SHOPPING_EXTRACTION,
+        search_results=[SearchResult(url=CANDIDATE_URL, title="Nike Air Max 97")],
+        pages={CANDIDATE_URL: MATCHING_PAGE},
+    )
+    client.post("/v1/devices", json={"apns_token": "tok1"})
+    upload_and_resolve(client, png_upload)
+    payload = client.app.state.push_sender.sent[0][1]
+    assert payload["aps"]["alert"]["title"] == "찾았어요: Nike Air Max 97"
+
+
+def test_resolved_push_targets_only_the_owning_install(make_client, png_upload):
+    client = make_client(SHOPPING_EXTRACTION, search_results=[], pages={})
+    client.post("/v1/devices", json={"apns_token": "tok-a"})
+    client.headers["X-Install-Id"] = "install-b"
+    client.post("/v1/devices", json={"apns_token": "tok-b"})
+    upload_and_resolve(client, png_upload)
+
+    assert [token for token, _ in client.app.state.push_sender.sent] == ["tok-b"]
 
 
 def test_resolved_push_disabled_by_setting(make_client, png_upload):
@@ -384,6 +430,66 @@ def test_feedback_persisted(make_client, png_upload):
         rows = session.query(Feedback).filter_by(card_id=card["id"]).all()
     assert len(rows) == 1
     assert rows[0].kind == "not_this"
+
+
+def test_not_this_rejects_the_card(make_client, png_upload):
+    # "Not this" stops resurfacing: the card leaves the feed for good, while a
+    # direct fetch (e.g. from an old push) still works and shows the status.
+    client = make_client(GENERIC_EXTRACTION)
+    card = upload_and_resolve(client, png_upload)
+    assert client.post(f"/v1/cards/{card['id']}/feedback", json={"kind": "not_this"}).status_code == 204
+
+    assert client.get("/v1/cards").json()["cards"] == []
+    assert client.get(f"/v1/cards/{card['id']}").json()["status"] == "rejected"
+
+    # "correct" feedback leaves the card in the feed.
+    other = upload_and_resolve(client, png_upload)
+    client.post(f"/v1/cards/{other['id']}/feedback", json={"kind": "correct"})
+    assert [c["id"] for c in client.get("/v1/cards").json()["cards"]] == [other["id"]]
+
+
+def test_requests_without_install_id_are_rejected(make_client, png_upload):
+    client = make_client(GENERIC_EXTRACTION)
+    card = upload_and_resolve(client, png_upload)
+    del client.headers["X-Install-Id"]
+
+    assert client.post("/v1/captures", files=png_upload).status_code == 401
+    assert client.get(f"/v1/captures/{card['capture_id']}").status_code == 401
+    assert client.get(f"/v1/captures/{card['capture_id']}/image").status_code == 401
+    assert client.get("/v1/cards").status_code == 401
+    assert client.get(f"/v1/cards/{card['id']}").status_code == 401
+    assert client.post(f"/v1/cards/{card['id']}/feedback", json={"kind": "correct"}).status_code == 401
+    assert client.post("/v1/devices", json={"apns_token": "tok1"}).status_code == 401
+    assert client.get("/healthz").status_code == 200
+
+
+def test_cards_and_images_are_scoped_to_the_install(make_client, png_upload):
+    client = make_client(GENERIC_EXTRACTION)
+    card = upload_and_resolve(client, png_upload)
+    client.headers["X-Install-Id"] = "install-b"
+
+    assert client.get("/v1/cards").json()["cards"] == []
+    assert client.get(f"/v1/cards/{card['id']}").status_code == 404
+    assert client.get(f"/v1/captures/{card['capture_id']}").status_code == 404
+    assert client.get(f"/v1/captures/{card['capture_id']}/image").status_code == 404
+    assert client.post(f"/v1/cards/{card['id']}/feedback", json={"kind": "not_this"}).status_code == 404
+    assert client.get("/v1/cards", params={"cursor": card["id"]}).status_code == 400
+
+    client.headers["X-Install-Id"] = "install-a"
+    assert [c["id"] for c in client.get("/v1/cards").json()["cards"]] == [card["id"]]
+
+
+def test_device_token_is_rehomed_on_reinstall(make_client):
+    from app.models import Device
+
+    client = make_client(GENERIC_EXTRACTION)
+    client.post("/v1/devices", json={"apns_token": "tok1"})
+    client.headers["X-Install-Id"] = "install-b"
+    client.post("/v1/devices", json={"apns_token": "tok1"})
+
+    with client.app.state.session_factory() as session:
+        rows = session.query(Device).all()
+    assert [(row.apns_token, row.install_id) for row in rows] == [("tok1", "install-b")]
 
 
 def test_cards_listing_and_filter(make_client, png_upload):

@@ -57,7 +57,8 @@ class CardOut(BaseModel):
     id: str
     capture_id: str
     type: Literal["shopping", "place", "generic"]
-    status: Literal["resolved", "failed"]
+    # "rejected" = the user answered "not this"; never listed, never pushed.
+    status: Literal["resolved", "failed", "rejected"]
     title: str
     created_at: datetime
     shopping: ShoppingPayload | None = None

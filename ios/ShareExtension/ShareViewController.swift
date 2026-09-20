@@ -6,9 +6,10 @@ import UniformTypeIdentifiers
 /// product experience, so every code path must end in
 /// completeRequest/cancelRequest — never leave the sheet hanging.
 final class ShareViewController: UIViewController {
-    // TODO: share the server URL with the main app via an App Group once
-    // signing/entitlements are set up; until then both sides default to localhost.
-    private static let defaultServerURL = "http://localhost:8000"
+    // The server URL comes from the App Group (set in the app's Settings).
+    // "Saved" means uploaded: the pipeline runs server-side and the card
+    // arrives by push, so a later pipeline failure is only visible in the
+    // app (background-URLSession handoff for large uploads is deferred).
     // Long-edge cap for the OCR decode; keeps 3x screenshots inside the
     // extension's memory budget. The original bytes are still uploaded.
     private static let ocrMaxPixelSize = 2000
@@ -102,9 +103,7 @@ final class ShareViewController: UIViewController {
     }
 
     private func send(_ upload: ImageUpload, ocrText: String) async throws {
-        guard let url = URL(string: Self.defaultServerURL + "/v1/captures") else {
-            throw URLError(.badURL)
-        }
+        let url = AppGroup.serverURL.appendingPathComponent("v1/captures")
         var form = MultipartFormData()
         form.addFile(name: "image", filename: upload.filename, mimeType: upload.mimeType, data: upload.data)
         form.addField(name: "ocr_text", value: ocrText)
@@ -113,6 +112,7 @@ final class ShareViewController: UIViewController {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(form.contentType, forHTTPHeaderField: "Content-Type")
+        InstallIdentity.apply(to: &request)
         let (_, response) = try await URLSession.shared.upload(for: request, from: form.finalized())
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else { throw URLError(.badServerResponse) }

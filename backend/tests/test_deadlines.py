@@ -55,10 +55,27 @@ def test_explicit_dates_parse(text, expected):
         "4.5점",
         "2/30까지",  # impossible date
         "9월 5일 또는 9월 12일",  # two uncued dates -> ambiguous
+        # Start / release / shipping dates are not deadlines.
+        "10월 5일부터",
+        "10월 5일 출시",
+        "10월 5일 오픈",
+        "10월 5일 발매 예정",
+        "9월 12일 배송",
+        "9월 12일 입고 예정",
+        "from Oct 5",
+        "Oct 5 release",
+        "available Oct 5",
+        "drops Sept 12",
     ],
 )
 def test_relative_or_ambiguous_text_returns_none(text):
     assert parse_deadline(text, NOW) is None
+
+
+def test_start_cue_does_not_veto_a_cued_deadline():
+    assert parse_deadline("10/1부터 10/15까지", NOW) == kst(2026, 10, 15, 23, 59)
+    assert parse_deadline("9월 12일까지 배송", NOW) == kst(2026, 9, 12, 23, 59)
+    assert parse_deadline("9월 5일 출시, 9월 20일 마감", NOW) == kst(2026, 9, 20, 23, 59)
 
 
 def test_period_end_is_the_deadline():

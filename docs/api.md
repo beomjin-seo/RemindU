@@ -4,6 +4,14 @@ Base path: `/v1`. Server default port: `8000`.
 
 All request and response bodies are JSON unless noted. Timestamps are ISO 8601.
 
+## Authentication
+
+Every `/v1` request carries an `X-Install-Id` header: an opaque per-install
+id (the app uses `identifierForVendor`, shared with its share extension).
+Captures, cards, and device tokens are scoped to that id; a missing or empty
+header is `401`, and another install's card reads as `404`. There are no
+user accounts in the MVP.
+
 ## Endpoints
 
 ### POST /v1/captures

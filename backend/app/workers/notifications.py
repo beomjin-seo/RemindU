@@ -5,13 +5,17 @@ Run: uv run python -m app.workers.notifications
 Invariant 3 (precision >> recall): two or three wrong alerts and users
 disable notifications, which kills the product. Every trigger is written to
 NotificationLog before delivery so it can never fire twice, unknown data
-sends nothing, and a digest with nothing in it is never sent.
+sends nothing, and a digest with nothing in it is never sent. Pushes go only
+to the devices of the install that owns the card; rejected ("not this")
+cards never trigger anything.
 
 Schedule (KST):
-- deadline: cards whose deadline_at falls within the next 36h, pushed once
-  during the 19:30-21:30 window the evening before (the "D-1 20:00" slot).
-- digest: Sunday 19:30-21:30, at most once per 6 days, only if the week
-  saved anything.
+- deadline: cards whose deadline_at falls within the next 36h AND on today's
+  or tomorrow's KST date, pushed once during the 19:30-21:30 window
+  ("오늘 마감" / "내일 마감"). A deadline two calendar days out waits for the
+  next evening.
+- digest: Sunday 19:30-21:30, per install, at most once per 6 days, only if
+  that install saved anything this week.
 - resolved: immediately after a capture becomes a card (settings.push_on_resolved).
 - price: see workers/price_tracker.py.
 """
@@ -36,7 +40,8 @@ __all__ = [
     "build_push_payload",
     "already_logged",
     "log_notification",
-    "notify_all_devices",
+    "notify_install_devices",
+    "push_once",
     "run_deadline_alerts",
     "run_weekly_digest",
     "send_resolved_push",
@@ -109,11 +114,21 @@ def already_logged(session_factory, card_id: str, kind: PushKind) -> bool:
         )
 
 
-def log_notification(session_factory, card_id: str | None, kind: PushKind, now: datetime) -> bool:
+def log_notification(
+    session_factory,
+    card_id: str | None,
+    kind: PushKind,
+    now: datetime,
+    install_id: str | None = None,
+) -> bool:
     """Reserve the trigger before delivery. False when the (card_id, kind)
     pair is already logged, so a concurrent worker cannot double-send."""
     with session_factory() as session:
-        session.add(NotificationLog(card_id=card_id, kind=kind, sent_at=_db_utc(now)))
+        session.add(
+            NotificationLog(
+                card_id=card_id, install_id=install_id, kind=kind, sent_at=_db_utc(now)
+            )
+        )
         try:
             session.commit()
         except IntegrityError:
@@ -122,13 +137,19 @@ def log_notification(session_factory, card_id: str | None, kind: PushKind, now: 
     return True
 
 
-def notify_all_devices(session_factory, sender: PushSender, payload: dict) -> int:
-    """Deliver to every registered device; drops devices APNs reports as
-    unregistered. Returns the number of devices attempted."""
-    # TODO: per-user device targeting once the API has accounts; until then
-    # every registered device belongs to the single dev/test user.
+def _install_devices(session_factory, install_id: str | None) -> list[Device]:
+    if install_id is None:
+        return []  # legacy rows with no owner: nobody to push to
     with session_factory() as session:
-        devices = session.scalars(select(Device)).all()
+        return session.scalars(select(Device).where(Device.install_id == install_id)).all()
+
+
+def notify_install_devices(
+    session_factory, sender: PushSender, payload: dict, install_id: str | None
+) -> int:
+    """Deliver to every device of one install; drops devices APNs reports as
+    unregistered. Returns the number of devices attempted."""
+    devices = _install_devices(session_factory, install_id)
     stale: list[str] = []
     for device in devices:
         try:
@@ -151,7 +172,7 @@ def _device_count(session_factory) -> int:
         return session.scalar(select(func.count()).select_from(Device)) or 0
 
 
-def _push(
+def push_once(
     session_factory,
     sender: PushSender,
     card_id: str | None,
@@ -159,12 +180,18 @@ def _push(
     title: str,
     body: str,
     now: datetime,
+    install_id: str | None,
 ) -> bool:
+    """One push for one trigger, to the owning install only. False when the
+    trigger was already logged or the install has no device to receive it
+    (nothing is logged then, so a device registered later still gets it)."""
+    if not _install_devices(session_factory, install_id):
+        return False
     # Log first, then send: a crash in between loses one push, never duplicates one.
-    if not log_notification(session_factory, card_id, kind, now):
+    if not log_notification(session_factory, card_id, kind, now, install_id):
         return False
     payload = build_push_payload(title, body, card_id or "", kind)
-    notify_all_devices(session_factory, sender, payload)
+    notify_install_devices(session_factory, sender, payload, install_id)
     return True
 
 
@@ -179,6 +206,17 @@ def deadline_at_of(payload: dict) -> datetime | None:
     return value if value.tzinfo else value.replace(tzinfo=SEOUL)
 
 
+def _deadline_title(now: datetime, deadline_at: datetime, name: str) -> str | None:
+    # Wording follows the KST calendar, not the 36h horizon: a deadline two
+    # days out is not "tomorrow" yet and waits for the next evening's run.
+    days = (deadline_at.astimezone(SEOUL).date() - _seoul(now).date()).days
+    if days == 0:
+        return f"오늘 마감: {name}"
+    if days == 1:
+        return f"내일 마감: {name}"
+    return None
+
+
 def _deadline_body(payload: dict, deadline_at: datetime) -> str:
     local = deadline_at.astimezone(SEOUL)
     text = payload.get("deadline_text") or f"{local.month}월 {local.day}일 {local:%H:%M}"
@@ -187,8 +225,8 @@ def _deadline_body(payload: dict, deadline_at: datetime) -> str:
 
 
 def run_deadline_alerts(session_factory, sender: PushSender, now: datetime) -> int:
-    """D-1 evening alert for shopping cards with an explicit deadline_at in
-    (now, now + 36h]. One per card, ever."""
+    """Evening alert for shopping cards with an explicit deadline_at in
+    (now, now + 36h] that falls today or tomorrow (KST). One per card, ever."""
     now = _aware(now)
     if not in_evening_window(now):
         return 0
@@ -196,7 +234,10 @@ def run_deadline_alerts(session_factory, sender: PushSender, now: datetime) -> i
         logged = select(NotificationLog.card_id).where(NotificationLog.kind == "deadline")
         cards = session.scalars(
             select(Card).where(
-                Card.type == "shopping", Card.status == "resolved", Card.id.not_in(logged)
+                Card.type == "shopping",
+                Card.status == "resolved",
+                Card.install_id.is_not(None),
+                Card.id.not_in(logged),
             )
         ).all()
 
@@ -205,40 +246,69 @@ def run_deadline_alerts(session_factory, sender: PushSender, now: datetime) -> i
         deadline_at = deadline_at_of(card.payload)
         if deadline_at is None or not (now < deadline_at <= now + DEADLINE_HORIZON):
             continue
-        title = f"내일 마감: {card.payload.get('product_name') or card.title}"
+        title = _deadline_title(now, deadline_at, card.payload.get("product_name") or card.title)
+        if title is None:
+            continue
         body = _deadline_body(card.payload, deadline_at)
-        if _push(session_factory, sender, card.id, "deadline", title, body, now):
+        if push_once(session_factory, sender, card.id, "deadline", title, body, now, card.install_id):
             sent += 1
     return sent
 
 
 def run_weekly_digest(session_factory, sender: PushSender, now: datetime) -> int:
-    """Sunday-evening digest of the week's saves. Nothing saved -> nothing sent."""
+    """Sunday-evening digest of each install's week. Nothing saved -> nothing sent."""
     now = _aware(now)
     if _seoul(now).weekday() != DIGEST_WEEKDAY or not in_evening_window(now):
         return 0
+    since = _db_utc(now - DIGEST_LOOKBACK)
+    digests: list[tuple[str, int, list[str]]] = []
     with session_factory() as session:
-        recent_digest = session.scalar(
-            select(NotificationLog.id).where(
-                NotificationLog.kind == "digest",
-                NotificationLog.sent_at >= _db_utc(now - DIGEST_MIN_GAP),
-            )
+        recent = select(Card).where(
+            Card.created_at >= since, Card.status == "resolved", Card.install_id.is_not(None)
         )
-        if recent_digest is not None:
-            return 0
-        since = _db_utc(now - DIGEST_LOOKBACK)
-        recent = select(Card).where(Card.created_at >= since)
-        count = session.scalar(select(func.count()).select_from(recent.subquery())) or 0
-        if count == 0:
-            return 0  # never a hollow digest
-        titles = session.scalars(
-            select(Card.title)
-            .where(Card.created_at >= since)
-            .order_by(Card.created_at.desc())
-            .limit(DIGEST_MAX_TITLES)
+        installs = session.scalars(
+            select(Card.install_id).where(recent.whereclause).distinct()
         ).all()
-    title = f"이번 주 저장 {count}개"
-    return int(_push(session_factory, sender, None, "digest", title, " · ".join(titles), now))
+        for install_id in installs:
+            recent_digest = session.scalar(
+                select(NotificationLog.id).where(
+                    NotificationLog.kind == "digest",
+                    NotificationLog.install_id == install_id,
+                    NotificationLog.sent_at >= _db_utc(now - DIGEST_MIN_GAP),
+                )
+            )
+            if recent_digest is not None:
+                continue
+            own = recent.where(Card.install_id == install_id)
+            count = session.scalar(select(func.count()).select_from(own.subquery())) or 0
+            if count == 0:
+                continue  # never a hollow digest
+            titles = session.scalars(
+                own.with_only_columns(Card.title)
+                .order_by(Card.created_at.desc())
+                .limit(DIGEST_MAX_TITLES)
+            ).all()
+            digests.append((install_id, count, titles))
+
+    sent = 0
+    for install_id, count, titles in digests:
+        title = f"이번 주 저장 {count}개"
+        if push_once(
+            session_factory, sender, None, "digest", title, " · ".join(titles), now, install_id
+        ):
+            sent += 1
+    return sent
+
+
+def _resolved_title(card: Card) -> str:
+    # "찾았어요" only when something was actually found: a verified product
+    # link or a geocoded place. A search-results fallback or a generic card
+    # was merely saved, and the push must not claim otherwise.
+    payload = card.payload
+    found = (card.type == "shopping" and bool((payload.get("link") or {}).get("verified"))) or (
+        card.type == "place" and payload.get("lat") is not None
+    )
+    return f"{'찾았어요' if found else '저장했어요'}: {card.title}"
 
 
 def _resolved_body(card: Card) -> str:
@@ -257,14 +327,15 @@ def _resolved_body(card: Card) -> str:
 
 def send_resolved_push(session_factory, sender: PushSender, card: Card) -> bool:
     """Called by the pipeline runner right after a card is committed."""
-    return _push(
+    return push_once(
         session_factory,
         sender,
         card.id,
         "resolved",
-        f"찾았어요: {card.title}",
+        _resolved_title(card),
         _resolved_body(card),
         datetime.now(timezone.utc),
+        card.install_id,
     )
 
 

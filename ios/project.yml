@@ -24,6 +24,8 @@ targets:
       path: Support/CaptureInbox.entitlements
       properties:
         aps-environment: development
+        com.apple.security.application-groups:
+          - group.com.captureinbox.app
     info:
       path: Support/CaptureInbox-Info.plist
       properties:
@@ -42,6 +44,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.captureinbox.app.share
+    entitlements:
+      path: Support/ShareExtension.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.captureinbox.app
     info:
       path: Support/ShareExtension-Info.plist
       properties:

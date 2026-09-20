@@ -19,6 +19,8 @@ class Capture(Base):
     __tablename__ = "captures"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_id)
+    # Per-install bearer (X-Install-Id); every row is visible only to its install.
+    install_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), default="processing")
     source_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Newline-separated lines recognized on-device; the default extraction input.
@@ -35,7 +37,10 @@ class Card(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_id)
     capture_id: Mapped[str] = mapped_column(String(32), index=True)
+    install_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     type: Mapped[str] = mapped_column(String(16))
+    # "resolved" | "rejected" ("not this" feedback: hidden from the feed and
+    # excluded from every push trigger).
     status: Mapped[str] = mapped_column(String(16), default="resolved")
     title: Mapped[str] = mapped_column(Text)
     payload: Mapped[dict] = mapped_column(JSON)
@@ -56,19 +61,22 @@ class Device(Base):
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_id)
     apns_token: Mapped[str] = mapped_column(Text, unique=True)
+    # Pushes are delivered only to the devices of the install that owns the card.
+    install_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class NotificationLog(Base):
     """One row per push trigger, so the same trigger never fires twice.
     card_id is NULL for digests (NULLs are distinct under the unique
-    constraint, so digests are limited by sent_at instead)."""
+    constraint, so digests are limited by install_id + sent_at instead)."""
 
     __tablename__ = "notification_log"
     __table_args__ = (UniqueConstraint("card_id", "kind", name="uq_notification_card_kind"),)
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_new_id)
     card_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    install_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     # "resolved" | "deadline" | "price" | "digest"
     kind: Mapped[str] = mapped_column(String(16))
     # Naive UTC.

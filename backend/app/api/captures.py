@@ -1,9 +1,19 @@
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Request, UploadFile
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 
+from app.api.auth import require_install_id
 from app.models import Capture
 from app.pipeline.runner import process_capture
 from app.schemas import CaptureCreatedOut, CaptureStatusOut
@@ -13,10 +23,19 @@ router = APIRouter(prefix="/v1/captures", tags=["captures"])
 _EXTENSIONS = {"image/jpeg": ".jpg", "image/png": ".png"}
 
 
+def _owned_capture(session, capture_id: str, install_id: str) -> Capture:
+    # Another install's capture is indistinguishable from a missing one.
+    capture = session.get(Capture, capture_id)
+    if capture is None or capture.install_id != install_id:
+        raise HTTPException(status_code=404, detail="capture not found")
+    return capture
+
+
 @router.post("", status_code=201, response_model=CaptureCreatedOut)
 async def create_capture(
     request: Request,
     background_tasks: BackgroundTasks,
+    install_id: str = Depends(require_install_id),
     image: UploadFile = File(...),
     source_hint: str | None = Form(None),
     # Newline-separated lines recognized on-device (Vision framework). This is
@@ -48,6 +67,7 @@ async def create_capture(
         session.add(
             Capture(
                 id=capture_id,
+                install_id=install_id,
                 status="processing",
                 source_hint=source_hint,
                 ocr_text=(ocr_text or "").strip() or None,
@@ -61,12 +81,12 @@ async def create_capture(
 
 
 @router.get("/{capture_id}", response_model=CaptureStatusOut)
-def get_capture(capture_id: str, request: Request) -> CaptureStatusOut:
+def get_capture(
+    capture_id: str, request: Request, install_id: str = Depends(require_install_id)
+) -> CaptureStatusOut:
     session_factory = request.app.state.session_factory
     with session_factory() as session:
-        capture = session.get(Capture, capture_id)
-        if capture is None:
-            raise HTTPException(status_code=404, detail="capture not found")
+        capture = _owned_capture(session, capture_id, install_id)
         return CaptureStatusOut(
             capture_id=capture.id,
             status=capture.status,
@@ -76,12 +96,12 @@ def get_capture(capture_id: str, request: Request) -> CaptureStatusOut:
 
 
 @router.get("/{capture_id}/image")
-def get_capture_image(capture_id: str, request: Request) -> FileResponse:
+def get_capture_image(
+    capture_id: str, request: Request, install_id: str = Depends(require_install_id)
+) -> FileResponse:
     session_factory = request.app.state.session_factory
     with session_factory() as session:
-        capture = session.get(Capture, capture_id)
-        if capture is None:
-            raise HTTPException(status_code=404, detail="capture not found")
+        capture = _owned_capture(session, capture_id, install_id)
         image_path = Path(capture.image_path)
     if not image_path.is_file():
         raise HTTPException(status_code=404, detail="capture image missing")

@@ -24,12 +24,25 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
-        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in
-            // Register regardless of the answer so the backend already holds
-            // the token if the user enables alerts later in Settings.
+        // Never prompt on launch: the permission is asked right after the first
+        // capture, when the value of "we'll tell you when it matters" is concrete.
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized else { return }
             DispatchQueue.main.async { application.registerForRemoteNotifications() }
         }
         return true
+    }
+
+    /// Ask for push permission once, contextually (after the first saved capture).
+    static func requestPushPermissionIfNeeded() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .notDetermined else { return }
+            center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                guard granted else { return }
+                DispatchQueue.main.async { UIApplication.shared.registerForRemoteNotifications() }
+            }
+        }
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

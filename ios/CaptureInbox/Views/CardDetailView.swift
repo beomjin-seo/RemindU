@@ -49,6 +49,16 @@ struct CardDetailView: View {
         .sheet(item: $safariItem) { item in
             SafariView(url: item.url).ignoresSafeArea()
         }
+        // Edge swipe back, like a pushed screen; vertical scrolling is untouched.
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24)
+                .onEnded { value in
+                    guard pendingLink == nil, value.startLocation.x < 40,
+                          value.translation.width > 90, abs(value.translation.height) < 80
+                    else { return }
+                    onClose()
+                }
+        )
     }
 
     // MARK: chrome
@@ -129,16 +139,7 @@ struct CardDetailView: View {
                     .aspectRatio(3.0 / 4.0, contentMode: .fit)
                     .frame(height: 300)
                     .overlay {
-                        AsyncImage(url: APIClient.captureImageURL(captureId: card.captureId)) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().scaledToFill()
-                            case .failure:
-                                Image(systemName: "photo").foregroundStyle(Color.inkMuted)
-                            default:
-                                ProgressView().tint(Color.inkMuted)
-                            }
-                        }
+                        RemoteImage(url: APIClient.captureImageURL(captureId: card.captureId))
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     .shadow(color: .black.opacity(0.25), radius: 11, y: 8)
@@ -185,11 +186,11 @@ struct CardDetailView: View {
 
     // MARK: candidate links
 
-    /// Ranked alternatives to the primary link, so a wrong best guess is one
-    /// tap from the right page. Rows never open directly: every tap goes
-    /// through the same link-confirm overlay as the primary action.
+    /// Shown only when no candidate verified: a verified link is the one
+    /// answer and alternatives would just dilute it. Rows never open
+    /// directly: every tap goes through the same link-confirm overlay.
     private var extraCandidates: [ShoppingCandidate] {
-        guard let shopping = card.shopping else { return [] }
+        guard let shopping = card.shopping, !shopping.link.verified else { return [] }
         return Array(shopping.candidates.filter { $0.url != shopping.link.url }.prefix(3))
     }
 
@@ -197,7 +198,7 @@ struct CardDetailView: View {
     private var candidatesSection: some View {
         if !extraCandidates.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                Text("후보 링크")
+                Text("비슷한 상품")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Color(hex: 0x90909A))
                     .padding(.top, 22)
@@ -262,7 +263,7 @@ struct CardDetailView: View {
     @ViewBuilder
     private var metaPill: some View {
         if let shopping = card.shopping {
-            pill(color: shopping.confidence.color, label: "링크 정확도", value: shopping.confidence.displayName)
+            pill(color: shopping.linkAccuracy.color, label: "링크 정확도", value: shopping.linkAccuracy.displayName)
         } else if card.place != nil {
             pill(color: Color(hex: 0x7AADFF), label: "장소", value: "지도에 저장됨")
         } else {
@@ -483,7 +484,7 @@ struct CardDetailView: View {
 
     private var primaryTitle: String {
         switch card.type {
-        case .shopping: return "원본 페이지 열기"
+        case .shopping: return isVerified ? "원본 페이지 열기" : "검색 결과 보기"
         case .place: return "네이버 지도에서 열기"
         case .generic: return "열기"
         }

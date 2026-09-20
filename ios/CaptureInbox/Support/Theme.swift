@@ -27,20 +27,35 @@ extension Color {
     static let confidenceLow = Color(hex: 0xFF9F0A)
 }
 
-extension ShoppingPayload.Confidence {
-    var displayName: String {
-        switch self {
-        case .high: return "높음"
-        case .medium: return "중간"
-        case .low: return "낮음"
+extension ShoppingPayload {
+    /// Three display states for the link, never a percentage: a verified
+    /// product page, a search-results page, or "similar" when the screenshot
+    /// identified the product weakly. Identification confidence alone must
+    /// never read as link confidence — an unverified link is a search link.
+    enum LinkAccuracy {
+        case verified
+        case search
+        case similar
+
+        var displayName: String {
+            switch self {
+            case .verified: return "검증됨"
+            case .search: return "검색 결과"
+            case .similar: return "비슷한 결과"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .verified: return .confidenceHigh
+            case .search: return .confidenceMedium
+            case .similar: return .confidenceLow
+            }
         }
     }
 
-    var color: Color {
-        switch self {
-        case .high: return .confidenceHigh
-        case .medium: return .confidenceMedium
-        case .low: return .confidenceLow
-        }
+    var linkAccuracy: LinkAccuracy {
+        if link.verified { return .verified }
+        return confidence == .low ? .similar : .search
     }
 }

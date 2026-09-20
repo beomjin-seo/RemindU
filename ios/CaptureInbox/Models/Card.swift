@@ -9,6 +9,8 @@ enum CardType: String, Codable {
 enum CardStatus: String, Codable {
     case resolved
     case failed
+    /// "Not this" feedback: hidden from the feed, never pushed again.
+    case rejected
 }
 
 struct Card: Codable, Identifiable {

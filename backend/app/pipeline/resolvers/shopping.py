@@ -56,7 +56,9 @@ def _verify_top_candidates(
                 url=result.url,
                 domain=domain,
                 title=result.title,
-                verified=verify_candidate(fetch_fn, result.url, extraction),
+                verified=verify_candidate(
+                    fetch_fn, result.url, extraction, result_price=result.price
+                ),
                 trusted=is_trusted_domain(domain),
                 kind="product",
             )

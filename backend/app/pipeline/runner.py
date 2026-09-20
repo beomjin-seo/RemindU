@@ -79,6 +79,7 @@ def process_capture(
 
             card = Card(
                 capture_id=capture.id,
+                install_id=capture.install_id,
                 type=kind,
                 status="resolved",
                 title=_derive_title(kind, extraction),
