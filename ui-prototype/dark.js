@@ -1,281 +1,129 @@
 (() => {
   'use strict';
-  const photos = [
-    {id:'chair', photo:'1503602642458-232111445657', style:'product', brand:'FORM & OBJECT', headline:'A quiet place.', sub:'Everyday chair · Natural', title:'매일 곁에 두고 싶은 의자', description:'자연스러운 소재와 단정한 형태의 조합.'},
-    {id:'forest', photo:'1441974231531-c6227db76b6e', style:'full', brand:'FIELD NOTES', headline:'Into the\nquiet.', sub:'A little further from the everyday.', title:'잠시, 초록 속으로', description:'다음 산책을 위해 저장해둔 숲의 한 장면.'},
-    {id:'coffee', photo:'1495474472287-4d71bcdd2085', style:'editorial', brand:'SLOW SUNDAY', headline:'Slow\nmornings.', sub:'Coffee & small rituals', title:'천천히 시작하는 아침', description:'커피 한 잔과 함께하는 작은 일상의 취향.'},
-    {id:'style', photo:'1515886657613-9f3515b0c78f', style:'full', brand:'THE EDIT', headline:'Less,\nbut better.', sub:'Notes on personal style', title:'가볍게 입는 하루', description:'다시 꺼내 보고 싶은 데일리 스타일.'},
-    {id:'interior', photo:'1600210492486-724fe5c67fb0', style:'editorial', brand:'SPACES', headline:'Room\nto breathe.', sub:'At home, at ease.', title:'머물고 싶은 공간', description:'따뜻한 빛과 여유가 있는 거실.'},
-    {id:'shoe', photo:'1549298916-b41d501d3772', style:'product', brand:'DAILY FINDS', headline:'One more step.', sub:'Sneakers · Warm tones', title:'다음 걸음을 위한 스니커즈', description:'색감이 마음에 들어 남겨둔 한 켤레.'},
-    {id:'lake', photo:'1470770841072-f978cf4d019e', style:'full', brand:'SOMEWHERE', headline:'Stay\na little.', sub:'Places worth remembering', title:'언젠가 가보고 싶은 곳', description:'잔잔한 호수 너머로 펼쳐지는 풍경.'},
-    {id:'perfume', photo:'1541643600914-78b084683601', style:'product', brand:'OBJECT JOURNAL', headline:'A lasting note.', sub:'Fragrance · The collection', title:'오래 기억하고 싶은 향', description:'좋아하는 향을 찾아가는 기록.'},
-    {id:'books', photo:'1494438639946-1ebd1d20bf85', style:'editorial', brand:'ON THE SHELF', headline:'Between\nthe pages.', sub:'A reading list for a slower day', title:'다음에 펼쳐볼 이야기', description:'읽고 싶은 책과 곁에 두고 싶은 문장들.'},
-  ];
-  // Design fixtures, not actual photo-library metadata or calibrated AI results.
-  // Keep capture time separate from file modification/import time for integration.
-  const sampleAnalysis = {
-    chair:{summary:'내추럴 우드 소재의 스툴',reason:'등받이 없는 형태와 밝은 나뭇결을 확인했어요.',confidence:92,capturedAt:'2026-09-05T14:32:00+09:00'},
-    forest:{summary:'햇빛이 들어오는 숲속 풍경',reason:'빽빽한 나무와 그 사이로 들어오는 빛을 확인했어요.',confidence:30,capturedAt:'2026-09-05T11:08:00+09:00'},
-    coffee:{summary:'라테 아트가 올라간 커피',reason:'커피 위의 우유 거품과 잎 모양 패턴을 확인했어요.',confidence:70,capturedAt:'2026-09-04T09:16:00+09:00'},
-    style:{summary:'옐로 컬러의 셔츠·팬츠 셋업',reason:'상의와 하의의 색상, 셔츠 칼라를 확인했어요.',confidence:31,capturedAt:'2026-09-04T08:45:00+09:00'},
-    interior:{summary:'뉴트럴 톤의 거실 인테리어',reason:'베이지 소파와 우드 가구의 조합을 확인했어요.',confidence:71,capturedAt:'2026-09-03T21:07:00+09:00'},
-    shoe:{summary:'나이키의 브라운 스니커즈',reason:'측면 스우시 로고와 브라운 색상을 확인했어요.',confidence:96,capturedAt:'2026-09-03T18:24:00+09:00'},
-    lake:{summary:'산과 호수가 있는 여행지',reason:'산의 능선과 물에 비친 풍경을 단서로 파악했어요.',confidence:24,capturedAt:'2026-09-02T23:12:00+09:00'},
-    perfume:{summary:'샤넬 N°5 향수 제품',reason:'병에 적힌 ‘N°5 CHANEL’ 문구를 확인했어요.',confidence:98,capturedAt:'2026-09-02T16:50:00+09:00'},
-    books:{summary:'화이트 스탠드 조명이 있는 책상',reason:'둥근 조명 갓과 관절형 프레임을 확인했어요.',confidence:58,capturedAt:'2026-09-01T10:03:00+09:00'},
-  };
-  const captureFormatter=new Intl.DateTimeFormat('ko-KR',{year:'numeric',month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit',hour12:true});
-  const candidateFixtures={chair:['wooden-stool','wooden-chair','wood-furniture'],forest:['forest'],coffee:[],style:['yellow-outfit','yellow-fashion'],shoe:['brown-sneakers','nike-shoes'],lake:['mountain-lake'],perfume:[]};
-  const candidateNames={chair:['원목 스툴 관련 사진','우드 체어 관련 사진','우드 가구 관련 사진'],forest:['숲속 풍경 관련 사진'],style:['옐로 셋업 관련 사진','옐로 패션 관련 사진'],shoe:['브라운 스니커즈 관련 사진','나이키 스니커즈 관련 사진'],lake:['산과 호수 관련 사진']};
-  function sourceUrl(p){return `https://images.unsplash.com/photo-${p.photo}?auto=format&fit=max&w=1600&q=90`;}
-  function confidenceBand(score){return score<=30?'low':score<=70?'medium':'high';}
-  function renderCandidates(p,analysis){
-    // Simulates zero, one, and multiple returned candidates. The UI accepts
-    // any count but displays only the three highest-scoring entries.
-    const terms=candidateFixtures[p.id];
-    const candidates=terms===undefined?[]:[
-      {title:analysis.summary,url:sourceUrl(p),source:'images.unsplash.com · 사진 원본',confidence:analysis.confidence},
-      ...terms.map((term,i)=>({title:candidateNames[p.id][i],url:`https://unsplash.com/s/photos/${term}`,source:'unsplash.com · 관련 이미지',confidence:Math.max(5,analysis.confidence-[24,64,70][i])})),
-    ];
-    const visible=candidates.sort((a,b)=>b.confidence-a.confidence).slice(0,3);
-    $('candidate-section').hidden=visible.length===0;
-    $('candidate-count').textContent=`${visible.length}개`;
-    $('candidate-list').replaceChildren();
-    for(const [i,candidate] of visible.entries()){
-      const li=document.createElement('li');
-      const link=document.createElement('a');link.className='candidate-link';link.href=candidate.url;link.target='_blank';link.rel='noopener noreferrer';
-      const rank=document.createElement('span');rank.className='candidate-rank';rank.textContent=String(i+1).padStart(2,'0');rank.setAttribute('aria-hidden','true');
-      const content=document.createElement('span');content.className='candidate-content';
-      const title=document.createElement('strong');title.textContent=candidate.title;
-      const source=document.createElement('small');source.textContent=candidate.source;content.append(title,source);
-      const score=document.createElement('span');score.className='candidate-score';score.dataset.confidence=confidenceBand(candidate.confidence);score.textContent=`${candidate.confidence}%`;score.setAttribute('aria-label',`AI 추정 링크 정확도 ${candidate.confidence}%`);
-      const arrow=document.createElement('span');arrow.className='candidate-arrow';arrow.setAttribute('aria-hidden','true');arrow.textContent='↗';
-      link.append(rank,content,score,arrow);li.append(link);$('candidate-list').append(li);
-    }
-  }
-  function formatCaptureTime(value){
-    const parts=Object.fromEntries(captureFormatter.formatToParts(new Date(value)).map(p=>[p.type,p.value]));
-    return `${parts.year}년 ${parts.month}월 ${parts.day}일 ${parts.dayPeriod} ${parts.hour}:${parts.minute}`;
-  }
   const $ = id => document.getElementById(id);
-  const device = $('device'), library = $('library'), detail = $('detail');
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  const forceReduced = new URLSearchParams(location.search).get('motion')==='reduce';
-  const motionDisabled = () => reduced.matches || forceReduced;
-  const collectionHeading=document.querySelector('.collection-heading');
-  const libraryFootnote=document.querySelector('.library-footnote');
-  const linkIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 15 6-6M8 10l-2 2a4 4 0 0 0 6 6l2-2M10 8l2-2a4 4 0 0 1 6 6l-2 2"/></svg>';
-  function art(p) {
-    return `<div class="shot-art ${p.style} ${p.id}"><img src="dark-assets/${p.id}.jpg" alt="" draggable="false"><div class="mini-brand">${p.brand}<span class="tiny-dot"></span></div><div class="mini-copy"><strong>${p.headline.replace('\n','<br>')}</strong><small>${p.sub}</small></div></div>`;
-  }
-  $('shot-grid').innerHTML = photos.map((p,i) => `<button class="shot" data-index="${i}" aria-label="${p.title} 상세 보기">${art(p)}<span class="link-badge">${linkIcon}</span></button>`).join('');
-  const cards = [...document.querySelectorAll('.shot')];
-
-  // Analytic critically damped springs retain current position and velocity
-  // when their targets change. No transition blocks input or resets velocity.
-  function scalar(value, frequency = 15) { return {value, target:value, velocity:0, frequency}; }
-  function step(s, dt) {
-    if (motionDisabled()) { s.value=s.target; s.velocity=0; return false; }
-    const d=s.value-s.target, a=s.velocity+s.frequency*d, decay=Math.exp(-s.frequency*dt);
-    s.value=s.target+(d+a*dt)*decay;
-    s.velocity=(s.velocity-s.frequency*a*dt)*decay;
-    if(Math.abs(s.value-s.target)<.001 && Math.abs(s.velocity)<.01) {s.value=s.target;s.velocity=0;return false;}
-    return true;
-  }
-  function snap(s,value){s.value=s.target=value;s.velocity=0;}
-  // Cards begin in a different spatial order, rather than tilted in their
-  // eventual cells. Coordinates adapt to the current grid size.
-  const collage=[
-    [-.04,.66,-23,1.02],[.82,.03,18,.83],[.40,.38,-10,.94],
-    [.03,.03,13,.90],[.91,.79,24,.82],[.85,.43,-16,.95],
-    [.03,.35,-12,.77],[.43,.91,11,.92],[.46,-.06,-21,.75],
+  const esc = s => String(s ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const icons={library:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>',folder:'<path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/>',search:'<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>'};
+  const icon = name => `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`;
+  const fixtures=[
+    ['chair','내추럴 우드 체어','스크린샷','공간 · 인테리어',['원목','의자','가구'],'작은 방 꾸미기 원룸 인테리어 책상 꾸미기','found'],
+    ['forest','초록 속으로 떠나는 주말','Instagram','여행 · 장소',['숲','산책','자연'],'쉬고 싶은 날 힐링 주말 여행','shared'],
+    ['coffee','집에서 만드는 한 잔의 라테','YouTube','일상 · 영감',['커피','홈카페','라테'],'아침 루틴 음료 만들기','shared'],
+    ['style','가볍게 입는 여름의 색','Instagram','패션 · 쇼핑',['옷','여름','스타일'],'내일 뭐 입지 데일리 코디','shared'],
+    ['interior','따뜻한 빛이 머무는 거실','스크린샷','공간 · 인테리어',['거실','베이지','조명'],'작은 방 꾸미기 원룸 인테리어 집 꾸미기','similar'],
+    ['shoe','다음 걸음을 위한 스니커즈','스크린샷','패션 · 쇼핑',['신발','스니커즈','브라운'],'편한 신발 산책 운동화','similar'],
+    ['lake','언젠가 머물고 싶은 곳','스크린샷','여행 · 장소',['호수','산','여행'],'쉬고 싶은 날 조용한 여행 휴가','missing'],
+    ['perfume','오래 기억하고 싶은 향','웹 링크','패션 · 쇼핑',['향수','샤넬','선물'],'생일 선물 향기 쇼핑','shared'],
+    ['books','다음에 펼쳐볼 이야기','웹 링크','일상 · 영감',['책','독서','책상'],'쉬고 싶은 날 독서 취미','shared']
   ];
-  const positions=cards.map((el)=>({el,badge:el.querySelector('.link-badge'),x:scalar(0,13),y:scalar(0,13),r:scalar(0,11),s:scalar(1,13),depth:scalar(1,12)}));
-  function scatterTarget(i){
-    const el=cards[i],grid=$('shot-grid'),[x,y,r,s]=collage[i];
-    return{x:x*(grid.clientWidth-el.offsetWidth)-el.offsetLeft,y:y*(grid.clientHeight-el.offsetHeight)-el.offsetTop+18,r,s,depth:1};
+  const photoIds=['1503602642458-232111445657','1441974231531-c6227db76b6e','1495474472287-4d71bcdd2085','1515886657613-9f3515b0c78f','1600210492486-724fe5c67fb0','1549298916-b41d501d3772','1470770841072-f978cf4d019e','1541643600914-78b084683601','1494438639946-1ebd1d20bf85'];
+  const folders=['공간 · 인테리어','패션 · 쇼핑','여행 · 장소','일상 · 영감'];
+  let items=fixtures.map((p,i)=>({id:p[0],title:p[1],platform:p[2],folder:p[3],tags:p[4],meaning:p[5],sourceState:p[6],image:`dark-assets/${p[0]}.jpg`,url:`https://images.unsplash.com/photo-${photoIds[i]}?auto=format&fit=max&w=1600&q=90`,sample:true,status:'ready',savedAt:Date.now()-i*86400000}));
+  let view='library',platform='전체',folder='',query='',sort='new',selected=null,toastTimer,returnFocus;
+  const scroll=$('library-scroll');
+  $('gather-status').hidden=true;
+  $('detail').hidden=true;
+  document.querySelector('.preview-caption').innerHTML='<span>공유하고, 정리하고, 다시 발견하세요.</span><span>프론트엔드 시안 · AI 분류·출처 검색·의미 검색은 예시 동작입니다.</span>';
+  $('replay').innerHTML='↻ 처음 화면';
+  document.title='모아보기 · Dark concept';
+  $('library').setAttribute('aria-label','콘텐츠 보관함');
+  const tabs=document.createElement('nav');tabs.className='app-tabs';tabs.setAttribute('aria-label','주요 메뉴');
+  tabs.innerHTML=[['library','보관함'],['folder','폴더'],['search','검색']].map(([id,label])=>`<button data-view="${id}" aria-label="${label}">${icon(id)}${label}</button>`).join('');
+  $('device').append(tabs);
+  const live=document.createElement('div');live.className='toast';live.hidden=true;live.setAttribute('role','status');$('device').append(live);
+  function toast(message){live.textContent=message;live.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>live.hidden=true,2600);}
+  function filtered(){
+    const terms=query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return items.filter(p=>(platform==='전체'||p.platform===platform)&&(!folder||p.folder===folder)&&(!terms.length||terms.every(t=>`${p.title} ${p.tags.join(' ')} ${p.meaning} ${p.folder}`.toLowerCase().includes(t)))).sort((a,b)=>sort==='new'?b.savedAt-a.savedAt:a.savedAt-b.savedAt);
   }
-  function collectTarget(i){
-    const el=cards[i],grid=$('shot-grid');
-    // An open fan briefly gathers the scattered cards before they fan out
-    // into the library. Each card retains a visible edge and its own depth.
-    return{x:(grid.clientWidth-el.offsetWidth)/2-el.offsetLeft+(i%3-1)*31,
-      y:(grid.clientHeight-el.offsetHeight)*.4-el.offsetTop+(Math.floor(i/3)-1)*39,
-      r:(i%3-1)*9+(Math.floor(i/3)-1)*3,s:.78+(i%3)*.055,depth:1};
+  function cards(){const list=filtered();return `<div class="collection-heading"><h2>${view==='search'?(query?'검색 결과':'최근 저장한 항목'):(folder||'최근 저장한 항목')} <span>${list.length}</span></h2><select id="sort" aria-label="저장 시간 정렬"><option value="new" ${sort==='new'?'selected':''}>최신순</option><option value="old" ${sort==='old'?'selected':''}>오래된순</option></select></div>${list.length?`<div class="shot-grid">${list.map(p=>`<button class="shot" data-item="${p.id}" aria-label="${esc(p.title)} 상세 보기"><div class="shot-visual"><img src="${esc(p.image)}" alt="" loading="lazy"><span class="platform-tag">${esc(p.platform)}</span><span class="link-badge">${p.status==='processing'?'◌':p.sourceState==='missing'?'?':'↗'}</span></div><strong class="card-name">${esc(p.title)}</strong><small class="card-folder">${p.status==='processing'?'✦ AI가 정리 중':esc(p.folder)}</small></button>`).join('')}</div>`:'<div class="empty"><strong>아직 발견하지 못했어요</strong>다른 단어나 플랫폼으로 찾아보세요.<br>저장한 순간은 그대로 보관되어 있어요.</div>'}`;}
+  function render(){
+    tabs.querySelectorAll('button').forEach(b=>{if(b.dataset.view===view)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});
+    const titles={library:'보관함',folder:'폴더',search:'검색'};
+    scroll.innerHTML=`<header class="library-heading"><div class="section-label"><span>모아 <span class="demo-label"> / MY COLLECTION</span></span><button class="add-button" id="add" aria-label="콘텐츠 추가">+</button></div><div class="heading-stack"><div class="ready-heading"><h1>${titles[view]}</h1></div></div></header>`;
+    if(view==='folder'&&!folder){scroll.innerHTML+=`<div class="ai-note"><b>✦</b><div><strong>분류는 AI에게, 발견은 나에게.</strong><small>저장한 내용에 맞춰 제자리를 찾아줘요.</small></div></div><div class="folder-grid">${[...folders,'분류 대기'].map(f=>`<button class="folder-tile" data-folder="${f}">${icon('folder')}<strong>${f}</strong><small>${items.filter(p=>p.folder===f).length}개 보관 중</small></button>`).join('')}</div>`;return;}
+    if(folder)scroll.innerHTML+=`<button class="back-folder" id="back-folder">‹ 모든 폴더</button>`;
+    if(view==='library')scroll.innerHTML+=`<div class="ai-note"><b>✦</b><div><strong>${items.filter(p=>p.status==='ready').length}개의 순간이 제자리를 찾았어요</strong><small>${folders.length}개 폴더에 담긴 나의 취향</small></div></div>`;
+    if(view==='search')scroll.innerHTML+=`<div class="searchbox">${icon('search')}<input id="search-input" aria-label="저장한 콘텐츠 검색" placeholder="예: 작은 방 꾸미기" value="${esc(query)}"><button id="clear-search" aria-label="검색어 지우기" style="background:none;color:#888">×</button></div><div class="suggestions">${['작은 방 꾸미기','쉬고 싶은 날','내일 뭐 입지'].map(s=>`<button class="chip" data-query="${s}">${s}</button>`).join('')}</div><p class="search-hint">${query?'✦ 제목뿐 아니라 저장한 내용의 의미로 찾아요.':'어떤 순간을 찾고 있나요?<br>주제나 느낌, 기억나는 단어를 적어보세요.'}<br><span class="demo-label">시안에서는 미리 연결한 예시 키워드로 검색됩니다.</span></p>`;
+    scroll.innerHTML+=`<div class="filters" aria-label="플랫폼 필터">${['전체','스크린샷','YouTube','Instagram','웹 링크'].map(p=>`<button class="chip ${platform===p?'active':''}" data-platform="${p}" aria-pressed="${platform===p}">${p}</button>`).join('')}</div><div id="results">${cards()}</div>`;
   }
-  function targetCard(p,values,immediate=false){
-    for(const key of ['x','y','r','s','depth']){p[key].target=values[key];if(immediate)snap(p[key],values[key]);}
-  }
-  const heading=scalar(0,11), pill=scalar(1,12);
-  let frame=0,lastTime=0,timers=[],selected=null,flight=null,drag=null,gathering=true;
-  const modal=scalar(0,19),dragY=scalar(0,19);
-  function schedule(fn, delay){const id=setTimeout(()=>{fn();wake();},delay);timers.push(id);}
-  function clearTimers(){timers.forEach(clearTimeout);timers=[];}
-  function wake(){if(!frame){lastTime=performance.now();frame=requestAnimationFrame(tick);}}
-  function tick(time){
-    frame=0;const dt=Math.min((time-lastTime)/1000,.05);lastTime=time;let active=false;
-    for(const p of positions){for(const key of ['x','y','r','s','depth'])active=step(p[key],dt)||active;
-      p.el.style.transform=`translate3d(${p.x.value}px,${p.y.value}px,0) rotate(${p.r.value}deg) scale(${p.s.value})`;
-      p.el.style.setProperty('--card-depth',p.depth.value);
-      p.badge.style.opacity=1-p.depth.value;
+  const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+  let navigationAnimation, outgoingAnimation, pageSnapshot;
+  function clearPageMotion(){navigationAnimation?.cancel();outgoingAnimation?.cancel();pageSnapshot?.remove();pageSnapshot=null;}
+  function changePage(update,direction=1){
+    clearPageMotion();
+    if(!reducedMotion.matches){
+      pageSnapshot=scroll.cloneNode(true);pageSnapshot.removeAttribute('id');
+      pageSnapshot.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'));
+      pageSnapshot.classList.add('page-snapshot');pageSnapshot.inert=true;pageSnapshot.setAttribute('aria-hidden','true');
+      scroll.parentElement.append(pageSnapshot);pageSnapshot.scrollTop=scroll.scrollTop;
     }
-    active=step(heading,dt)||active;active=step(pill,dt)||active;
-    $('intro-heading').style.opacity=Math.max(0,1-heading.value*2);$('intro-heading').style.transform=`translateY(${-9*heading.value}px)`;
-    $('ready-heading').style.opacity=Math.max(0,heading.value*2-1);$('ready-heading').style.transform=`translateY(${9*(1-heading.value)}px)`;
-    collectionHeading.style.opacity=heading.value;
-    libraryFootnote.style.opacity=heading.value*(1-pill.value);
-    $('gather-status').style.opacity=pill.value;$('gather-status').style.transform=`translate(-50%,${8*(1-pill.value)}px)`;
-    $('gather-status').setAttribute('aria-hidden',String(pill.target===0));
-    $('intro-heading').setAttribute('aria-hidden',String(heading.target===1));$('ready-heading').setAttribute('aria-hidden',String(heading.target===0));
-    if(selected!==null){
-      active=step(modal,dt)||active;
-      if(!drag) active=step(dragY,dt)||active;
-      renderDetail();
-      if(modal.target===0 && modal.value===0){finishClose();}
-      else if(modal.value===1 && !drag && dragY.value===0){
-        $('detail-art').style.visibility='visible';if(flight)flight.el.style.visibility='hidden';
-      }
-    }
-    if(active) frame=requestAnimationFrame(tick);
+    update();render();scroll.scrollTop=0;
+    if(reducedMotion.matches)return;
+    const options={duration:360,easing:'cubic-bezier(.25,.65,.3,1)'};
+    navigationAnimation=scroll.animate([{transform:`translateX(${direction*100}%)`},{transform:'translateX(0)'}],options);
+    outgoingAnimation=pageSnapshot.animate([{transform:'translateX(0)'},{transform:`translateX(${-direction*100}%)`}],options);
+    outgoingAnimation.onfinish=()=>{pageSnapshot?.remove();pageSnapshot=null;};
   }
-  function settle(immediate=false){
-    gathering=false;heading.target=1;pill.target=0;
-    positions.forEach(p=>{targetCard(p,{x:0,y:0,r:0,s:1,depth:0},immediate);p.el.style.zIndex='0';});
-    if(immediate){snap(heading,1);snap(pill,0);}device.dataset.phase='organized';wake();
+  tabs.addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(!b||b.dataset.view===view)return;const order=['library','folder','search'];const direction=Math.sign(order.indexOf(b.dataset.view)-order.indexOf(view));changePage(()=>{view=b.dataset.view;folder='';platform='전체';query='';},direction);});
+  reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches)clearPageMotion();});
+  scroll.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;if(b.id==='add')openAdd();if(b.dataset.platform){platform=b.dataset.platform;render();}if(b.dataset.folder)changePage(()=>{folder=b.dataset.folder;});if(b.id==='back-folder')changePage(()=>{folder='';},-1);if(b.dataset.query){query=b.dataset.query;render();}if(b.id==='clear-search'){query='';render();$('search-input').focus();}if(b.dataset.item)openDetail(b.dataset.item);});
+  scroll.addEventListener('input',e=>{if(e.target.id==='search-input'){query=e.target.value;$('results').innerHTML=cards();}});
+  scroll.addEventListener('change',e=>{if(e.target.id==='sort'){sort=e.target.value;$('results').innerHTML=cards();}});
+  function openDetail(id){
+    selected=items.find(p=>p.id===id);if(!selected)return;returnFocus=document.activeElement;const p=selected;
+    $('detail').hidden=false;$('library').inert=true;tabs.inert=true;
+    $('detail').querySelector('.detail-nav>span').textContent=p.platform;
+    $('detail-art').innerHTML=`<img src="${esc(p.image)}" alt="${esc(p.title)}">`;
+    $('detail').querySelector('.detail-info').innerHTML=`<div class="detail-meta"><span>${p.platform}</span><span>${new Date(p.savedAt).toLocaleDateString('ko-KR')} 저장</span></div><h2 id="detail-title">${esc(p.title)}</h2><p class="detail-description">${esc(p.meaning.split(' ').slice(0,5).join(' '))}에 관한 나의 기록.<br>마음에 들어 저장한 순간을 다시 이어보세요.</p><section class="analysis-box"><h3>✦ ${p.status==='processing'?'AI가 내용을 살펴보고 있어요':'AI가 이렇게 정리했어요'}</h3><label>폴더<select id="edit-folder">${[...folders,'분류 대기'].map(f=>`<option ${p.folder===f?'selected':''}>${f}</option>`).join('')}</select></label><label>키워드<input id="edit-tags" value="${esc(p.tags.join(', '))}" placeholder="쉼표로 키워드를 구분하세요"></label><p>내용의 주제와 시각적 단서를 바탕으로 분류했어요. 원하는 폴더와 키워드로 바꿀 수 있어요.</p><button class="subtle-button" id="save-labels">분류 수정 저장</button></section><section class="source-state" id="source-state"></section>`;
+    renderSource();$('detail-scroll').scrollTop=0;$('close-detail').focus({preventScroll:true});
   }
-  function play(initial=false){
-    if(selected!==null) finishClose();
-    clearTimers();$('library-scroll').scrollTop=0;
-    if(motionDisabled()){settle(true);return;}
-    gathering=true;device.dataset.phase='scattered';heading.target=0;pill.target=1;
-    $('gather-copy').textContent='흩어진 순간을 모으고 있어요';
-    positions.forEach((p,i)=>{targetCard(p,scatterTarget(i),initial);p.el.style.zIndex=String([5,2,7,4,1,6,3,8,0][i]);});
-    const collectAt=initial?680:850;
-    schedule(()=>{
-      device.dataset.phase='gathering';
-      positions.forEach((p,i)=>schedule(()=>targetCard(p,collectTarget(i)),i*24));
-    },collectAt);
-    schedule(()=>{
-      device.dataset.phase='arranging';heading.target=1;
-      $('gather-copy').textContent='하나씩, 제자리를 찾고 있어요';
-      positions.forEach((p,i)=>schedule(()=>{
-        p.el.style.zIndex=String(20+i);
-        targetCard(p,{x:0,y:0,r:0,s:1,depth:0});
-      },i*85));
-    },collectAt+780);
-    schedule(()=>{$('gather-copy').textContent='모두 제자리에 모였어요';},collectAt+2150);
-    schedule(()=>{gathering=false;pill.target=0;device.dataset.phase='organized';positions.forEach(p=>p.el.style.zIndex='0');},collectAt+2700);
-    wake();
+  function renderSource(){const p=selected;if(!p)return;
+    $('source-state').dataset.searching=String(p.sourceState==='searching');
+    const labels={found:'원본 링크를 찾았어요',similar:'비슷한 결과를 찾았어요',missing:'아직 원본을 찾지 못했어요',searching:'원본을 찾고 있어요',shared:'공유한 링크를 보관했어요'};
+    $('source-state').innerHTML=`<h3>${labels[p.sourceState]}</h3><p>${p.sample?'데모 결과입니다. 샘플의 링크는 사진 출처로 연결돼요.':p.platform==='스크린샷'?'이미지의 글자와 시각적 단서를 바탕으로 찾습니다. 시안에서는 실제 검색을 실행하지 않아요.':'공유할 때 전달된 원본 URL을 그대로 보관합니다.'}</p>${['found','similar','shared'].includes(p.sourceState)?`<a target="_blank" rel="noopener noreferrer" href="${esc(p.url)}">${p.sample?'샘플 사진 출처 확인':esc(new URL(p.url).hostname)} ↗</a>`:''}${p.platform==='스크린샷'?`<button class="subtle-button" id="retry-source" ${p.sourceState==='searching'?'disabled':''}>${p.sourceState==='searching'?'찾는 중…':'원본 다시 찾기'}</button>`:''}`;
+    const link=$('open-source'),available=['found','similar','shared'].includes(p.sourceState);link.removeAttribute('href');link.setAttribute('aria-disabled',String(!available));if(available)link.href=p.url;
+    link.textContent=available?(p.sample?'샘플 출처 열기 ↗':`${p.platform==='웹 링크'?'웹사이트':p.platform}에서 열기 ↗`):'원본 링크를 기다리고 있어요';
   }
-  function relativeRect(element){const r=element.getBoundingClientRect(),d=device.getBoundingClientRect();return{x:r.left-d.left,y:r.top-d.top,w:r.width,h:r.height};}
-  function openDetail(index, focus=true){
-    if(selected!==null)return;
-    const source=cards[index], p=photos[index];
-    // Capture the live presentation geometry before settling the library.
-    const current=relativeRect(source);
-    const angle=positions[index].r.value;
-    const width=source.offsetWidth, height=source.offsetHeight, scale=positions[index].s.value;
-    const origin={x:current.x+current.w/2,y:current.y+current.h/2,scale,angle};
-    clearTimers();settle();selected=index;
-    const analysis=sampleAnalysis[p.id];
-    $('detail-title').textContent=analysis.summary;$('detail-description').textContent=analysis.reason;
-    const confidence=Math.max(0,Math.min(100,Math.round(analysis.confidence)));
-    $('link-confidence').textContent=`${confidence}%`;
-    $('match-status').setAttribute('aria-label',`AI 추정 링크 정확도 ${confidence}%`);
-    $('match-status').dataset.confidence=confidenceBand(confidence);
-    $('capture-time').dateTime=analysis.capturedAt;
-    $('capture-time').textContent=formatCaptureTime(analysis.capturedAt);
-    $('capture-time').setAttribute('aria-label',`사진첩 기록 ${formatCaptureTime(analysis.capturedAt)}`);
-    renderCandidates(p,analysis);
-    $('detail-source').textContent='Unsplash';$('detail-type').textContent='사진 원본 · 시안용 링크';
-    $('open-source').href=sourceUrl(p);
-    $('detail-art').innerHTML=art(p);$('detail-art').style.visibility='hidden';detail.hidden=false;$('detail-scroll').scrollTop=0;
-    const target=relativeRect($('detail-art'));
-    const el=document.createElement('div');el.className='flying-card';el.innerHTML=art(p);el.setAttribute('aria-hidden','true');
-    el.style.width=`${width}px`;el.style.height=`${height}px`;device.append(el);
-    flight={el,width,height,origin,target:{x:target.x+target.w/2,y:target.y+target.h/2,scale:target.w/width,angle:0}};
-    source.style.visibility='hidden';library.inert=true;modal.target=1;snap(dragY,0);
-    renderDetail();if(focus)$('close-detail').focus({preventScroll:true});wake();
+  let detailExit=null;
+  function finishDetailClose(){
+    $('detail').hidden=true;detailExit?.cancel();detailExit=null;
+    $('library').inert=false;tabs.inert=false;selected=null;
+    if(returnFocus?.isConnected)returnFocus.focus({preventScroll:true});else tabs.querySelector('[aria-current=page]')?.focus({preventScroll:true});
   }
-  function renderDetail(){
-    const t=modal.value,dy=dragY.value;detail.style.opacity=Math.max(0,t-Math.abs(dy)/1100);
-    // Real content follows the finger 1:1, while the close/open path stays
-    // anchored to the selected thumbnail.
-    $('detail-preview').style.transform=`translateY(${dy}px)`;
-    if(!flight)return;
-    const a=flight.origin,b=flight.target;
-    const x=a.x+(b.x-a.x)*t,y=a.y+(b.y-a.y)*t+dy*t;
-    const scale=(a.scale+(b.scale-a.scale)*t)*(1-Math.min(Math.abs(dy)/1600,.15));
-    flight.el.style.transform=`translate3d(${x}px,${y}px,0) rotate(${a.angle*(1-t)}deg) scale(${scale}) translate(-50%,-50%)`;
-    flight.el.style.borderRadius=`${10-5*t}px`;flight.el.style.opacity=motionDisabled()?String(t):'1';
+  function closeDetail(immediate=false){
+    const detail=$('detail');if(detail.hidden)return;
+    if(immediate||reducedMotion.matches){finishDetailClose();return;}
+    if(detailExit)return;
+    const style=getComputedStyle(detail);
+    detailExit=detail.animate([
+      {transform:style.transform},
+      {transform:'translateX(100%)'}
+    ],{duration:400,easing:'cubic-bezier(.4,0,.7,.3)',fill:'forwards'});
+    detailExit.onfinish=finishDetailClose;
   }
-  function closeDetail(){
-    if(selected===null)return;
-    const r=relativeRect(cards[selected]);
-    flight.origin={x:r.x+r.w/2,y:r.y+r.h/2,scale:1,angle:0};
-    $('detail-art').style.visibility='hidden';flight.el.style.visibility='visible';modal.target=0;dragY.target=0;wake();
+  reducedMotion.addEventListener('change',()=>{if(reducedMotion.matches&&detailExit)finishDetailClose();});
+  $('close-detail').onclick=()=>closeDetail();
+  $('detail').addEventListener('click',e=>{if(e.target.id==='save-labels'){selected.folder=$('edit-folder').value;selected.tags=$('edit-tags').value.split(',').map(t=>t.trim()).filter(Boolean);render();toast('폴더와 키워드를 저장했어요');}if(e.target.id==='retry-source'){const p=selected;p.sourceState='searching';renderSource();setTimeout(()=>{p.sourceState=p.sample?'similar':'missing';if(selected?.id===p.id)renderSource();render();},1500);}});
+  function openAdd(){
+    returnFocus=document.activeElement;const layer=document.createElement('div');layer.className='sheet-layer';layer.id='add-layer';layer.innerHTML=`<section class="sheet" role="dialog" aria-modal="true" aria-labelledby="add-title"><div class="sheet-head"><h2 id="add-title">새로운 순간 담기</h2><button id="close-add" aria-label="닫기">×</button></div><p>링크 하나, 스크린샷 한 장.<br>나머지는 AI가 정리해 드릴게요.</p><form id="link-form"><label for="new-link">링크 붙여넣기</label><input id="new-link" type="url" required placeholder="https://…"><button class="primary-button" type="submit">링크 저장하기 ↗</button></form><label class="upload-area">스크린샷에서 원본 찾기<input type="file" id="upload" accept="image/*" aria-label="스크린샷 선택"></label><label>공유받기 체험 <span class="demo-label">DEMO</span></label><div class="sheet-demo"><button data-demo="YouTube">YouTube 영상</button><button data-demo="Instagram">Instagram 릴스</button><button data-demo="스크린샷">스크린샷</button></div><p class="demo-label">분석은 예시로 진행되며 파일은 서버로 전송되지 않습니다.<br>이번 시안의 추가·수정 내용은 새로고침하면 초기화됩니다.</p></section>`;
+    $('device').append(layer);$('library').inert=true;tabs.inert=true;$('new-link').focus();
+    layer.addEventListener('click',e=>{if(e.target.id==='close-add'||e.target===layer)closeAdd();if(e.target.dataset.demo){const demo=items.find(p=>p.platform===e.target.dataset.demo);addItem({...demo,id:crypto.randomUUID(),savedAt:Date.now()});}});
+    $('link-form').onsubmit=e=>{e.preventDefault();let u;try{u=new URL($('new-link').value);}catch{return;}if(!['http:','https:'].includes(u.protocol)){$('new-link').setCustomValidity('http 또는 https 링크를 입력하세요.');$('new-link').reportValidity();return;}const host=u.hostname;addItem({id:crypto.randomUUID(),title:host,platform:/(^|\.)(youtube\.com|youtu\.be)$/.test(host)?'YouTube':/(^|\.)instagram\.com$/.test(host)?'Instagram':'웹 링크',image:'dark-assets/books.jpg',url:u.href,sourceState:'shared',tags:[],meaning:'새로 저장한 링크',sample:false,savedAt:Date.now()});};
+    $('new-link').oninput=()=> $('new-link').setCustomValidity('');
+    $('upload').onchange=e=>{const f=e.target.files[0];if(!f)return;if(!f.type.startsWith('image/')){toast('이미지 파일을 선택해 주세요');return;}addItem({id:crypto.randomUUID(),title:f.name,platform:'스크린샷',image:URL.createObjectURL(f),url:'',sourceState:'missing',tags:[],meaning:'새로 저장한 스크린샷',sample:false,savedAt:Date.now()});};
   }
-  function finishClose(){
-    if(selected===null)return;
-    const last=cards[selected];last.style.visibility='';flight?.el.remove();flight=null;selected=null;drag=null;
-    detail.hidden=true;library.inert=false;snap(modal,0);snap(dragY,0);last.focus({preventScroll:true});
+  function closeAdd(){
+    const layer=$('add-layer');if(!layer)return;
+    if(layer.dataset.closing)return;layer.dataset.closing='true';
+    const finish=()=>{layer.remove();$('library').inert=false;tabs.inert=false;if(returnFocus?.isConnected)returnFocus.focus();};
+    if(reducedMotion.matches){finish();return;}
+    const sheet=layer.querySelector('.sheet');
+    const exit=sheet.animate([{transform:getComputedStyle(sheet).transform},{transform:'translateY(100%)'}],{duration:300,easing:'cubic-bezier(.4,0,.7,.3)',fill:'forwards'});
+    exit.onfinish=finish;
   }
-  cards.forEach((card,i)=>card.addEventListener('click',()=>openDetail(i)));
-  $('close-detail').addEventListener('click',closeDetail);
-  $('replay').addEventListener('click',()=>play());
-  document.addEventListener('keydown',e=>{
-    if(selected===null)return;
-    if(e.key==='Escape'){e.preventDefault();closeDetail();}
-    if(e.key==='Tab'){
-      const first=$('close-detail'),last=$('open-source');
-      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
-      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
-    }
-  });
-  const preview=$('detail-preview');
-  preview.addEventListener('pointerdown',e=>{
-    // Touch gestures scroll the complete detail page, including the image.
-    // Mouse dragging retains the desktop dismiss interaction.
-    if(selected===null||e.button!==0||e.pointerType!=='mouse')return;
-    preview.setPointerCapture(e.pointerId);
-    drag={id:e.pointerId,start:e.clientY-dragY.value,history:[{y:e.clientY,t:e.timeStamp}],moved:false};
-    // Re-grabbing a closing preview redirects its existing spring.
-    modal.target=1;$('detail-art').style.visibility='hidden';flight.el.style.visibility='visible';wake();
-  });
-  preview.addEventListener('pointermove',e=>{
-    if(!drag||drag.id!==e.pointerId)return;
-    const distance=e.clientY-drag.start;
-    if(!drag.moved&&Math.abs(distance)<8)return;
-    drag.moved=true;
-    dragY.value=distance>=0?distance:distance*.2;
-    drag.history.push({y:e.clientY,t:e.timeStamp});drag.history=drag.history.filter(p=>e.timeStamp-p.t<90);
-    renderDetail();
-  });
-  function endDrag(e,cancelled=false){
-    if(!drag||drag.id!==e.pointerId)return;
-    const history=drag.history,first=history[0],last=history[history.length-1];
-    const velocity=e.timeStamp-last.t>100?0:(last.y-first.y)/Math.max(last.t-first.t,1)*1000;
-    const moved=drag.moved;drag=null;
-    dragY.velocity=cancelled?0:velocity;dragY.target=0;
-    const projected=dragY.value+velocity*.18;
-    if(!cancelled&&moved&&velocity>-150&&projected>110)closeDetail();else{modal.target=1;wake();}
-  }
-  preview.addEventListener('pointerup',e=>endDrag(e));
-  preview.addEventListener('pointercancel',e=>endDrag(e,true));
-  preview.addEventListener('lostpointercapture',e=>endDrag(e,true));
-  new ResizeObserver(()=>{
-    if(selected!==null&&flight){const r=relativeRect($('detail-art'));flight.target={x:r.x+r.w/2,y:r.y+r.h/2-dragY.value,scale:r.w/flight.width,angle:0};renderDetail();}
-  }).observe(device);
-  $('detail-scroll').addEventListener('scroll',()=>{
-    if(selected===null||!flight)return;
-    const r=relativeRect($('detail-art'));flight.target={x:r.x+r.w/2,y:r.y+r.h/2-dragY.value,scale:r.w/flight.width,angle:0};
-    if(modal.target===1 && modal.value===1 && !drag){flight.el.style.visibility='hidden';$('detail-art').style.visibility='visible';}
-  });
-  reduced.addEventListener('change',()=>{clearTimers();settle(true);wake();});
-  const params=new URLSearchParams(location.search);
-  if(params.has('embed'))document.body.classList.add('embedded');
-  const mode=params.get('view');
-  if(mode==='feed'||mode==='detail'){settle(true);if(mode==='detail')requestAnimationFrame(()=>openDetail(0,!params.has('embed')));}
-  else if(mode==='scattered'){positions.forEach((p,i)=>{targetCard(p,scatterTarget(i),true);p.el.style.zIndex=String(i);});snap(pill,0);device.dataset.phase='scattered';wake();}
-  else play(true);
+  function addItem(p){const target=p.folder||'일상 · 영감';p.folder='분류 대기';p.status='processing';items.unshift(p);closeAdd();view='library';folder='';platform='전체';render();scroll.scrollTop=0;toast('저장했어요. AI가 정리 중이에요');setTimeout(()=>{p.status='ready';p.folder=target;if(!p.tags.length)p.tags=['새로운 영감','나중에 보기'];render();toast('자동 분류 완료 · 예시 결과입니다');},2000);}
+  document.addEventListener('keydown',e=>{const modal=$('add-layer')||(!$('detail').hidden?$('detail'):null);if(!modal)return;if(e.key==='Escape'){e.preventDefault();if($('add-layer'))closeAdd();else closeDetail();}if(e.key==='Tab'){const all=[...modal.querySelectorAll('button:not(:disabled),a[href],input,select')].filter(x=>x.offsetParent!==null);const first=all[0],last=all.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}});
+  $('replay').onclick=()=>{closeDetail(true);closeAdd();view='library';folder='';platform='전체';query='';render();scroll.scrollTop=0;};
+  if(new URLSearchParams(location.search).has('embed'))document.documentElement.classList.add('embedded');
+  render();if(new URLSearchParams(location.search).get('view')==='detail')openDetail(items[0].id);
 })();
