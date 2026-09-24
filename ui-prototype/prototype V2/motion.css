@@ -1,0 +1,35 @@
+/* V2 motion: quiet entrances, directional navigation, immediate feedback. */
+:root{--motion-ease:cubic-bezier(.22,1,.36,1);--motion-fast:160ms}
+.shot{animation:none}
+.shot:nth-child(3n+2){animation-delay:45ms}
+.shot:nth-child(3n+3){animation-delay:90ms}
+.folder-tile{animation:none}
+.folder-tile:nth-child(2){animation-delay:45ms}
+.folder-tile:nth-child(3){animation-delay:90ms}
+.folder-tile:nth-child(4){animation-delay:135ms}
+.folder-tile:nth-child(5){animation-delay:180ms}
+.shot-visual,.add-button,.chip,.folder-tile,.subtle-button,.primary-button,.app-tabs button{transition:transform var(--motion-fast) ease-out,background-color var(--motion-fast) ease-out,color var(--motion-fast) ease-out}
+.shot:active .shot-visual,.folder-tile:active{transform:scale(.97)}
+.add-button:active,.chip:active,.subtle-button:active,.primary-button:active{transform:scale(.95)}
+.app-tabs button:active{transform:translateY(2px)}
+.app-tabs button[aria-current=page] svg{animation:nav-settle 280ms var(--motion-ease)}
+.detail:not([hidden]){animation:detail-enter 500ms cubic-bezier(.32,.05,.2,1) both}
+.sheet-layer{animation:none}
+.sheet{animation:sheet-enter 380ms var(--motion-ease) both}
+.toast:not([hidden]){animation:toast-enter 260ms var(--motion-ease) both}
+.source-state[data-searching=true] h3{animation:none}
+.shot[data-processing=true] .link-badge{animation:spin 1.3s linear infinite}
+@media(hover:hover){.shot:hover .shot-visual{transform:translateY(-3px)}.folder-tile:hover{background:#25252c}.add-button:hover{transform:rotate(90deg)}}
+@keyframes detail-enter{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes sheet-enter{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes toast-enter{from{transform:translateY(160px)}to{transform:translateY(0)}}
+.library{overflow:hidden}
+.library-scroll{background:var(--surface)}
+.page-snapshot{position:absolute;inset:0;pointer-events:none;z-index:2}
+@keyframes nav-settle{from{transform:translateY(3px) scale(.9)}to{transform:none}}
+@keyframes processing{from{opacity:.5}to{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){
+  .device *,.device *::before,.device *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+  .shot:hover .shot-visual,.shot:active .shot-visual,.folder-tile:active,.add-button:hover,.add-button:active,.chip:active,.subtle-button:active,.primary-button:active,.app-tabs button:active{transform:none}
+}
