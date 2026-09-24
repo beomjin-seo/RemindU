@@ -15,11 +15,24 @@
 .app-tabs button[aria-current=page] svg{animation:nav-settle 280ms var(--motion-ease)}
 .detail:not([hidden]){animation:detail-enter 500ms cubic-bezier(.32,.05,.2,1) both}
 .sheet-layer{animation:none}
+.device.add-open .library-scroll{overflow:hidden;overscroll-behavior:none}
+.sheet-layer{overscroll-behavior:none}
+.sheet{overscroll-behavior:contain}
 .sheet{animation:sheet-enter 380ms var(--motion-ease) both}
 .toast:not([hidden]){animation:toast-enter 260ms var(--motion-ease) both}
 .source-state[data-searching=true] h3{animation:none}
 .shot[data-processing=true] .link-badge{animation:spin 1.3s linear infinite}
-@media(hover:hover){.shot:hover .shot-visual{transform:translateY(-3px)}.folder-tile:hover{background:#25252c}.add-button:hover{transform:rotate(90deg)}}
+.page-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:20px 0 24px}
+.page-heading h1{font-size:32px;margin:0;line-height:1.2}
+.library-scroll.folder-detail-page{padding-top:0}
+.folder-detail-page .page-heading{position:sticky;top:0;z-index:4;height:57px;margin:0 -22px 24px;padding:0 18px;background:var(--surface)}
+.page-heading .add-button{position:relative;display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;padding:0;line-height:1}
+.page-heading .add-button::after{content:"";position:absolute;inset:-5px;border-radius:50%}
+.page-heading .add-button svg{display:block;width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.round-button,.sheet-head button,.sheet-demo button,.select-trigger,.select-option,.back-folder{transition:transform var(--motion-fast) ease-out,background-color var(--motion-fast) ease-out;touch-action:manipulation}
+.round-button:active,.sheet-head button:active,.sheet-demo button:active,.select-trigger:active,.select-option:active,.back-folder:active{transform:scale(.96)}
+.add-button:active{background:#34343c}
+.shot:hover .link-badge{background:#1d2127b8}
 @keyframes detail-enter{from{transform:translateX(100%)}to{transform:translateX(0)}}
 @keyframes sheet-enter{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes toast-enter{from{transform:translateY(160px)}to{transform:translateY(0)}}
@@ -31,5 +44,5 @@
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){
   .device *,.device *::before,.device *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
-  .shot:hover .shot-visual,.shot:active .shot-visual,.folder-tile:active,.add-button:hover,.add-button:active,.chip:active,.subtle-button:active,.primary-button:active,.app-tabs button:active{transform:none}
+  .shot:active .shot-visual,.folder-tile:active,.add-button:active,.chip:active,.subtle-button:active,.primary-button:active,.app-tabs button:active,.round-button:active,.sheet-head button:active,.sheet-demo button:active,.select-trigger:active,.select-option:active,.back-folder:active{transform:none}
 }
