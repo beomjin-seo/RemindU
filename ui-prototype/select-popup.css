@@ -8,6 +8,6 @@
 .select-popup::backdrop{background:transparent}
 .select-option{display:flex;width:100%;align-items:center;justify-content:space-between;gap:18px;min-height:42px;padding:10px 12px;border:0;border-radius:9px;background:none;color:#b8bac5;text-align:left;font:inherit;font-size:12px;cursor:pointer}
 .select-option[aria-selected=true]{background:#2d3b53;color:#aecdff}
-.select-option:hover,.select-option:focus-visible{background:#34343e}
-.select-option[aria-selected=true]:hover{background:#334561}
+.select-option:active,.select-option:focus-visible{background:#34343e}
+.select-option[aria-selected=true]:active{background:#334561}
 .select-check{width:15px;color:#91b6ff}
