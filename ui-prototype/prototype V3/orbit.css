@@ -1,0 +1,93 @@
+/* Storyge's image-only, touch-first constellation. */
+.storyge-orbit {
+  position: relative;
+  width: 100%;
+  min-height: 280px;
+  overflow: hidden;
+  isolation: isolate;
+  contain: layout paint;
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
+}
+.storyge-orbit.is-dragging {
+  cursor: grabbing;
+}
+.orbit-item {
+  position: absolute;
+  inset: 0 auto auto 0;
+  display: block;
+  width: var(--orbit-size, 104px);
+  height: var(--orbit-size, 104px);
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #26292d;
+  color: #b4c9e8;
+  overflow: hidden;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: inherit;
+  transform-origin: 50% 50%;
+  /* Transforms are integrated in a single rAF loop, never interpolated twice. */
+  transition: none;
+  will-change: auto;
+  box-shadow: 0 4px 15px #0000001c;
+  outline: none;
+  -webkit-touch-callout: none;
+}
+.orbit-item.is-in-view {
+  will-change: transform;
+}
+.orbit-item::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid #ffffff19;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px #0000000d;
+}
+.orbit-item img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+.orbit-item:focus-visible {
+  outline: 2px solid #b4c9e8;
+  outline-offset: 4px;
+  z-index: 4;
+}
+.orbit-item .orbit-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-family: inherit;
+  font-size: calc(var(--orbit-size, 104px) * 0.28);
+  font-weight: 500;
+  pointer-events: none;
+}
+.orbit-item img + .orbit-fallback {
+  display: none;
+}
+.orbit-item.has-image-error img {
+  display: none;
+}
+.orbit-item.has-image-error .orbit-fallback {
+  display: grid;
+}
+@media (prefers-reduced-motion: reduce) {
+  .orbit-item,
+  .orbit-item.is-in-view {
+    will-change: auto;
+  }
+}

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#151618" />
+    <meta name="color-scheme" content="dark" />
+    <meta
+      name="description"
+      content="Storyge — 저장한 링크와 이미지를 한곳에서 탐색하는 개인 보관함."
+    />
+    <title>Storyge — Prototype V3</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="orbit.css" />
+    <script src="vendor/lucide.min.js" defer></script>
+    <script src="store.js" defer></script>
+    <script src="orbit.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#page-title">본문으로 이동</a>
+    <div id="app" class="app-shell">
+      <aside class="sidebar" aria-label="주요 메뉴">
+        <a class="wordmark" href="./index.html" aria-label="Storyge 홈"
+          >Storyge<span class="wordmark-dot">.</span></a
+        >
+        <button class="quick-search" data-action="search">
+          <i data-lucide="search"></i><span>저장 항목 검색</span><kbd>⌘ K</kbd>
+        </button>
+        <nav id="desktop-nav" class="desktop-nav"></nav>
+        <div class="sidebar-collections">
+          <div class="section-line">
+            <span>내 폴더</span
+            ><button
+              class="icon-button small"
+              data-action="new-folder"
+              aria-label="폴더 만들기"
+            >
+              <i data-lucide="plus"></i>
+            </button>
+          </div>
+          <div id="side-folders"></div>
+        </div>
+        <div class="sidebar-bottom">
+          <button class="quiet-button" data-action="help">
+            <i data-lucide="info"></i>시안 안내
+          </button>
+          <div class="local-status">
+            <i data-lucide="hard-drive"></i
+            ><span id="storage-label">이 브라우저에 저장</span
+            ><span class="version">V3</span>
+          </div>
+        </div>
+      </aside>
+      <main id="main" class="main">
+        <header class="page-header">
+          <div id="heading"></div>
+          <div class="header-actions" id="header-actions"></div>
+        </header>
+        <div id="content" class="content"></div>
+      </main>
+      <nav id="mobile-nav" class="mobile-nav" aria-label="주요 메뉴"></nav>
+    </div>
+    <div class="modal-root" id="modal-root"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <div id="launch" class="launch" role="status">
+      <span>Storyge<span class="wordmark-dot">.</span></span>
+    </div>
+    <noscript
+      ><div class="no-script">
+        Storyge를 사용하려면 브라우저에서 JavaScript를 활성화하세요.
+      </div></noscript
+    >
+  </body>
+</html>

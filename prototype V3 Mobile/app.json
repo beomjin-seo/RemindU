@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Storyge",
+    "slug": "storyge-mobile-v3",
+    "version": "3.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "scheme": "storyge",
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.storyge.prototype"
+    },
+    "android": { "package": "com.storyge.prototype" },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "저장할 스크린샷이나 이미지를 선택합니다.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}
